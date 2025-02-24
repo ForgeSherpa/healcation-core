@@ -28,20 +28,11 @@ func Connect() {
 	DB = connection
 	fmt.Println("Starting migrations...")
 
+	// Menjalankan auto migration
 	err = connection.AutoMigrate(
 		&models.History{},
-		&models.Popular{},
-		&models.Preference{},
-		&models.Preferences{},
-		&models.PreferenceLink{},
-		&models.SelectPlace{},
-		&models.PlaceRecommendation{},
-		&models.AccomodationRecommendation{},
-		&models.Time{},
+		&models.SelectedAccomodation{},
 		&models.SelectedPlace{},
-		&models.Timeline{},
-		&models.DateData{},
-		&models.PlaceVisited{},
 		&models.User{},
 	)
 	if err != nil {
@@ -49,11 +40,7 @@ func Connect() {
 	}
 	fmt.Println("Migrations completed")
 
-	SeedHistory()
-	SeedPopular()
-	SeedPreference()
-	SeedSelect_Place()
-	SeedTimelines()
+	Seed()
 
 	fmt.Println("Seed data inserted")
 }

@@ -1,11 +1,10 @@
 package routes
 
 import (
-	"healcationBackend/routes/api"
 	"healcationBackend/routes/auth"
-	"healcationBackend/routes/home"
+	"healcationBackend/routes/history"
 	"healcationBackend/routes/planner"
-	"healcationBackend/routes/timeline"
+	"healcationBackend/routes/profile"
 	"healcationBackend/routes/travel"
 
 	"github.com/gin-gonic/gin"
@@ -13,9 +12,8 @@ import (
 
 func Routes(r *gin.Engine) {
 	auth.RoutesAuth(r)
-	home.HomeRoutes(r)
+	history.HistoryRoutes(r)
+	profile.ProfileRoutes(r)
 	planner.PlannerRoutes(r)
 	travel.TravelRoutes(r)
-	timeline.TimelineRoutes(r)
-	api.ApiRoutes(r)
 }

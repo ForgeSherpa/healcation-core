@@ -20,17 +20,13 @@ func Register(c *gin.Context) {
 	}
 
 	if c.Bind(&data) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to read data",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read data"})
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(data.Password), 10)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to hash password",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
 		return
 	}
 
@@ -42,15 +38,11 @@ func Register(c *gin.Context) {
 
 	result := database.DB.Create(&user)
 	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to create user",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Registration successful",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Registration successful"})
 }
 
 func Login(c *gin.Context) {
@@ -75,9 +67,12 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	expAccess := time.Now().Add(time.Hour * 24 * 7)
+	expRefresh := time.Now().Add(time.Hour * 24 * 30)
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
-		"exp": time.Now().Add(time.Hour * 1).Unix(),
+		"exp": expAccess.Unix(),
 	})
 	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("SECRET")))
 	if err != nil {
@@ -87,7 +82,7 @@ func Login(c *gin.Context) {
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
-		"exp": time.Now().Add(time.Hour * 24 * 7).Unix(),
+		"exp": expRefresh.Unix(),
 	})
 	refreshTokenString, err := refreshToken.SignedString([]byte(os.Getenv("SECRET")))
 	if err != nil {
@@ -98,11 +93,11 @@ func Login(c *gin.Context) {
 	user.RefreshToken = refreshTokenString
 	database.DB.Save(&user)
 
-	c.SetCookie("access_token", accessTokenString, 3600, "/", "", false, true)
-
 	c.JSON(http.StatusOK, gin.H{
-		"access_token":  accessTokenString,
-		"refresh_token": refreshTokenString,
+		"access_token":             accessTokenString,
+		"access_token_expired_at":  expAccess,
+		"refresh_token":            refreshTokenString,
+		"refresh_token_expired_at": expRefresh,
 	})
 }
 
@@ -113,9 +108,7 @@ func Validate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"userID": userID,
-	})
+	c.JSON(http.StatusOK, gin.H{"userID": userID})
 }
 
 func Logout(c *gin.Context) {
@@ -124,11 +117,7 @@ func Logout(c *gin.Context) {
 		database.DB.Model(&models.User{}).Where("id = ?", userID).Update("refresh_token", "")
 	}
 
-	c.SetCookie("access_token", "", -1, "/", "", false, true)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Logout successful",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 }
 
 func RefreshToken(c *gin.Context) {
@@ -143,13 +132,15 @@ func RefreshToken(c *gin.Context) {
 
 	var user models.User
 	if err := database.DB.First(&user, "refresh_token = ?", data.RefreshToken).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Refresh Token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired Refresh Token"})
 		return
 	}
 
+	expAccess := time.Now().Add(time.Hour * 24 * 7)
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": user.ID,
-		"exp": time.Now().Add(time.Hour * 1).Unix(),
+		"exp": expAccess.Unix(),
 	})
 	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("SECRET")))
 	if err != nil {
@@ -157,7 +148,10 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
+	database.DB.Model(&user).Update("refresh_token", "")
+
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": accessTokenString,
+		"access_token":            accessTokenString,
+		"access_token_expired_at": expAccess,
 	})
 }

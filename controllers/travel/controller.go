@@ -1,142 +1,140 @@
 package travel
 
 import (
-	"healcationBackend/database"
-	"healcationBackend/models"
 	"net/http"
 
-	// "healcationBackend/services"
 	"github.com/gin-gonic/gin"
 )
 
-func GetPreferences(c *gin.Context) {
-	var preferenceLinks []models.PreferenceLink
-	if err := database.DB.Find(&preferenceLinks).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve preferences"})
-		return
+func GetPlaces(c *gin.Context) {
+	response := gin.H{
+		"accomodations": []gin.H{
+			{
+				"name":  "Luxury Hotel Paris",
+				"image": "https://example.com/luxury-hotel.jpg",
+			},
+		},
+		"places": []gin.H{
+			{
+				"name":        "Eiffel Tower",
+				"image":       "https://example.com/eiffel-tower.jpg",
+				"description": "A famous landmark in Paris, known for its stunning views.",
+				"town":        "Paris",
+				"type":        "Landmark",
+			},
+		},
 	}
 
-	response := make([]map[string]interface{}, len(preferenceLinks))
-	for i, link := range preferenceLinks {
-		response[i] = map[string]interface{}{
-			"preferencesId": link.PreferencesID,
-			"preferenceId":  link.PreferenceID,
-			"type":          link.Type,
-			"image":         link.Image,
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"preferences": response})
+	c.JSON(http.StatusOK, response)
 }
 
-// func GetSelectPlaces(c *gin.Context) {
-// 	var selectPlaces []models.SelectPlace
-// 	if err := database.DB.Preload("PlaceRecommendation").Preload("AccomodationRecommendation").Find(&selectPlaces).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve select places"})
-// 		return
-// 	}
+func GetPlaceDetail(c *gin.Context) {
+	placeName := c.Param("name")
 
-// 	// Looping untuk mengambil data dari Gemini API berdasarkan kota
-// 	for i, place := range selectPlaces {
-// 		geminiData, err := services.FetchFromGeminiAPI(place.City)
-// 		if err == nil && geminiData != nil {
-// 			// Update data di database
-// 			database.DB.Model(&place).Association("PlaceRecommendation").Replace(geminiData.PlaceRecommendations)
-// 			database.DB.Model(&place).Association("AccomodationRecommendation").Replace(geminiData.AccomodationRecommendations)
+	response := gin.H{
+		"name":        placeName,
+		"image":       "https://example.com/img.jpg",
+		"description": "Contoh deskripsi tempat wisata atau akomodasi.",
+	}
 
-// 			// Update response dengan data terbaru
-// 			selectPlaces[i].PlaceRecommendation = geminiData.PlaceRecommendations
-// 			selectPlaces[i].AccomodationRecommendation = geminiData.AccomodationRecommendations
-// 		}
-// 	}
+	c.JSON(http.StatusOK, response)
+}
 
-// 	// Buat respons JSON
-// 	response := make([]map[string]interface{}, len(selectPlaces))
-// 	for i, place := range selectPlaces {
-// 		response[i] = map[string]interface{}{
-// 			"id":                         place.ID,
-// 			"city":                       place.City,
-// 			"country":                    place.Country,
-// 			"description":                place.Description,
-// 			"placeRecommendation":        place.PlaceRecommendation,
-// 			"accomodationRecommendation": place.AccomodationRecommendation,
-// 			"selectedPlace":              place.SelectedPlace,
-// 			"selectedAccomodation":       place.SelectedAccomodation,
-// 		}
-// 	}
+func Timeline(c *gin.Context) {
+	response := gin.H{
+		"budget":  "100 - 500 USD",
+		"country": "Indonesia",
+		"town":    "Jakarta",
+		"title":   "Gemini Generated",
+		"timeline": map[string][]map[string]string{
+			"2024-04-01": {
+				{
+					"image":    "barelang1.jpg",
+					"landmark": "Barelang Bridge",
+					"roadName": "Jl. Trans Barelang",
+					"time":     "10:00",
+					"town":     "Batam",
+					"type":     "Tourist Attraction",
+				},
+				{
+					"image":    "barelang1.jpg",
+					"landmark": "Batam Botanical Garden",
+					"roadName": "Jl. Engku Putri",
+					"time":     "14:00",
+					"town":     "Batam",
+					"type":     "Park",
+				},
+			},
+		},
+	}
 
-// 	c.JSON(http.StatusOK, gin.H{"selectPlaces": response})
-// }
+	c.JSON(http.StatusOK, response)
+}
 
-// GetSelectPlaces mengambil daftar SelectPlace beserta relasinya
-func GetSelectPlaces(c *gin.Context) {
-	var selectPlaces []models.SelectPlace
+type SelectPlaceRequest struct {
+	Country      string                      `json:"country"`
+	Town         string                      `json:"town"`
+	StartDate    string                      `json:"startDate"`
+	EndDate      string                      `json:"endDate"`
+	Accomodation string                      `json:"accomodation"`
+	Title        string                      `json:"title"`
+	Timelines    map[string][]TimelineDetail `json:"timelines"`
+}
 
-	// Menggunakan Preload untuk mengambil relasi
-	if err := database.DB.
-		Preload("PlaceRecommendation").
-		Preload("AccomodationRecommendation").
-		Preload("SelectedPlace.Places").
-		Find(&selectPlaces).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve select places"})
+type TimelineDetail struct {
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
+}
+
+type SelectPlaceResponse struct {
+	Message string    `json:"message"`
+	Data    PlaceData `json:"data"`
+}
+
+type PlaceData struct {
+	Country              string                      `json:"country"`
+	Town                 string                      `json:"town"`
+	Title                string                      `json:"title"`
+	StartDate            string                      `json:"startDate"`
+	EndDate              string                      `json:"endDate"`
+	SelectedAccomodation []AccomodationDetail        `json:"selectedAccomodation"`
+	Timeline             map[string][]TimelineDetail `json:"timeline"`
+}
+
+type AccomodationDetail struct {
+	Name     string `json:"name"`
+	RoadName string `json:"roadName"`
+}
+
+func SelectPlace(c *gin.Context) {
+	var request SelectPlaceRequest
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Membentuk respons JSON
-	response := make([]map[string]interface{}, len(selectPlaces))
-	for i, place := range selectPlaces {
-		// Format data PlaceRecommendation
-		placeRecommendations := make([]map[string]interface{}, len(place.PlaceRecommendation))
-		for j, rec := range place.PlaceRecommendation {
-			placeRecommendations[j] = map[string]interface{}{
-				"id":           rec.ID,
-				"placeToVisit": rec.PlaceToVisit,
-				"town":         rec.Town,
-				"image":        rec.Image,
-			}
-		}
-
-		// Format data AccomodationRecommendation
-		accommodationRecommendations := make([]map[string]interface{}, len(place.AccomodationRecommendation))
-		for j, rec := range place.AccomodationRecommendation {
-			accommodationRecommendations[j] = map[string]interface{}{
-				"id":    rec.ID,
-				"name":  rec.Name,
-				"town":  rec.Town,
-				"image": rec.Image,
-			}
-		}
-
-		// Format data SelectedPlace
-		selectedPlaces := make([]map[string]interface{}, len(place.SelectedPlace))
-		for j, timeSlot := range place.SelectedPlace {
-			places := make([]map[string]interface{}, len(timeSlot.Places))
-			for k, selectedPlace := range timeSlot.Places {
-				places[k] = map[string]interface{}{
-					"id":           selectedPlace.ID,
-					"placeToVisit": selectedPlace.PlaceToVisit,
-					"town":         selectedPlace.Town,
-				}
-			}
-
-			selectedPlaces[j] = map[string]interface{}{
-				"id":        timeSlot.ID,
-				"timeOfDay": timeSlot.TimeOfDay,
-				"places":    places,
-			}
-		}
-
-		response[i] = map[string]interface{}{
-			"id":                         place.ID,
-			"city":                       place.City,
-			"country":                    place.Country,
-			"description":                place.Description,
-			"placeRecommendation":        placeRecommendations,
-			"accomodationRecommendation": accommodationRecommendations,
-			"selectedPlace":              selectedPlaces,
-			"selectedAccomodation":       place.SelectedAccomodation,
-		}
+	response := SelectPlaceResponse{
+		Message: "Done! Enjoy your vacation!",
+		Data: PlaceData{
+			Country:   request.Country,
+			Town:      request.Town,
+			Title:     request.Title,
+			StartDate: request.StartDate,
+			EndDate:   request.EndDate,
+			SelectedAccomodation: []AccomodationDetail{
+				{
+					Name:     request.Accomodation,
+					RoadName: "",
+				},
+			},
+			Timeline: request.Timelines,
+		},
 	}
 
-	c.JSON(http.StatusOK, gin.H{"selectPlaces": response})
+	c.JSON(http.StatusOK, response)
 }

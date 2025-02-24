@@ -2,23 +2,31 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"os"
-	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func Validate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString, err := c.Cookie("access_token")
-		if err != nil {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "No access token provided"})
 			c.Abort()
 			return
 		}
-		fmt.Println("Access Token from Cookie: ", tokenString) // Debugging line
 
+		tokenParts := strings.Split(authHeader, " ")
+		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
+			c.Abort()
+			return
+		}
+
+		tokenString := tokenParts[1]
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -33,13 +41,12 @@ func Validate() gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-			// Handle both string and float64 for "sub"
 			userID := claims["sub"]
 			switch v := userID.(type) {
 			case string:
 				c.Set("userID", v)
 			case float64:
-				c.Set("userID", strconv.FormatFloat(v, 'f', -1, 64))
+				c.Set("userID", fmt.Sprintf("%.0f", v))
 			default:
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid userID"})
 				c.Abort()
