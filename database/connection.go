@@ -1,11 +1,12 @@
 package database
 
 import (
-	"fmt"
-	"healcationBackend/models"
+	"log"
 	"os"
 
-	"gorm.io/driver/mysql"
+	"healcationBackend/models"
+
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -13,34 +14,31 @@ var DB *gorm.DB
 
 func Connect() {
 	var err error
-	dsn := os.Getenv("DB")
-	if dsn == "" {
-		panic("Database DSN is not set")
-	}
-	fmt.Println("Connecting to database with DSN:", dsn)
 
-	connection, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	dbPath := os.Getenv("DB_PATH")
+	log.Println("Connecting to SQLite database:", dbPath)
+
+	connection, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
-		panic("Failed to connect to database: " + err.Error())
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	fmt.Println("Database connected")
+
+	log.Println("Database connected successfully")
 
 	DB = connection
-	fmt.Println("Starting migrations...")
 
-	// Menjalankan auto migration
-	err = connection.AutoMigrate(
+	log.Println("Running database migrations...")
+	if err := connection.AutoMigrate(
 		&models.History{},
 		&models.SelectedAccomodation{},
 		&models.SelectedPlace{},
 		&models.User{},
-	)
-	if err != nil {
-		panic("Failed to migrate database: " + err.Error())
+	); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
 	}
-	fmt.Println("Migrations completed")
+
+	log.Println("Database migrations completed")
 
 	Seed()
-
-	fmt.Println("Seed data inserted")
+	log.Println("Seed data inserted successfully")
 }

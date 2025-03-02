@@ -10,19 +10,19 @@ import (
 )
 
 type HistoryResponse struct {
-	ID        uint   `json:"id"`
-	Country   string `json:"country"`
-	Town      string `json:"town"`
-	StartDate string `json:"startDate"`
-	EndDate   string `json:"endDate"`
-	Image     string `json:"image"`
+	ID        uint     `json:"id"`
+	Country   string   `json:"country"`
+	Town      string   `json:"town"`
+	StartDate string   `json:"startDate"`
+	EndDate   string   `json:"endDate"`
+	Image     []string `json:"image"`
 }
 
 func GetHistories(c *gin.Context) {
 	var histories []models.History
 	database.DB.Find(&histories)
 
-	var responseHistories []HistoryResponse
+	responseHistories := make([]HistoryResponse, 0)
 	for _, h := range histories {
 		responseHistories = append(responseHistories, HistoryResponse{
 			ID:        h.ID,
@@ -30,7 +30,7 @@ func GetHistories(c *gin.Context) {
 			Town:      h.Town,
 			StartDate: h.StartDate.Format(time.RFC3339),
 			EndDate:   h.EndDate.Format(time.RFC3339),
-			Image:     h.Image,
+			Image:     models.StringArray(h.Image),
 		})
 	}
 

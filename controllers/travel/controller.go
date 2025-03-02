@@ -2,9 +2,12 @@ package travel
 
 import (
 	"fmt"
+	"healcationBackend/database"
+	"healcationBackend/models"
 	"healcationBackend/services"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -179,11 +182,48 @@ type AccomodationDetail struct {
 	RoadName string `json:"roadName"`
 }
 
+func parseDate(dateStr string) time.Time {
+	parsedTime, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return time.Now() // Jika gagal parsing, gunakan waktu saat ini
+	}
+	return parsedTime
+}
+
 func SelectPlace(c *gin.Context) {
 	var request SelectPlaceRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	history := models.History{
+		Country:     request.Country,
+		Town:        request.Town,
+		StartDate:   parseDate(request.StartDate),
+		EndDate:     parseDate(request.EndDate),
+		Description: request.Title,
+		Image:       models.StringArray{},
+	}
+
+	history.SelectedAccomodation = []models.SelectedAccomodation{
+		{
+			Name:  request.Accomodation,
+			Image: models.StringArray{},
+		},
+	}
+	for _, timelineDetails := range request.Timelines {
+		for _, detail := range timelineDetails {
+			history.SelectedPlaces = append(history.SelectedPlaces, models.SelectedPlace{
+				PlaceToVisit: detail.Landmark,
+				Town:         detail.Town,
+				Image:        models.StringArray{detail.Image},
+			})
+		}
+	}
+
+	if err := database.DB.Create(&history).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save history"})
 		return
 	}
 
