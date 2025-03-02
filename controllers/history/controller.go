@@ -10,7 +10,7 @@ import (
 )
 
 type HistoryResponse struct {
-	ID        uint     `json:"id"`
+	ID        string   `json:"id"`
 	Country   string   `json:"country"`
 	Town      string   `json:"town"`
 	StartDate string   `json:"startDate"`
@@ -47,7 +47,7 @@ func GetHistoryDetail(c *gin.Context) {
 	id := c.Param("id")
 	var history models.History
 
-	if err := database.DB.Preload("SelectedAccomodation").Preload("SelectedPlaces").First(&history, "id = ?", id).Error; err != nil {
+	if err := database.DB.First(&history, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "History not found"})
 		return
 	}
@@ -63,9 +63,6 @@ func DeleteHistory(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "History not found"})
 		return
 	}
-
-	database.DB.Where("history_id = ?", id).Delete(&models.SelectedAccomodation{})
-	database.DB.Where("history_id = ?", id).Delete(&models.SelectedPlace{})
 
 	if err := database.DB.Delete(&history).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete history"})

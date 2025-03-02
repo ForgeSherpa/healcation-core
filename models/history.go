@@ -5,33 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type History struct {
-	ID                   uint                   `gorm:"primaryKey" json:"id"`
-	Country              string                 `json:"country"`
-	Town                 string                 `json:"town"`
-	StartDate            time.Time              `json:"startDate"`
-	EndDate              time.Time              `json:"endDate"`
-	Image                StringArray            `json:"image" gorm:"type:text"`
-	Description          string                 `json:"description"`
-	SelectedAccomodation []SelectedAccomodation `json:"selectedAccomodation" gorm:"foreignKey:HistoryID"`
-	SelectedPlaces       []SelectedPlace        `json:"selectedPlaces" gorm:"foreignKey:HistoryID"`
+	AutoID    uint        `gorm:"primaryKey;autoIncrement" json:"-"`
+	ID        string      `json:"id" gorm:"uniqueIndex"`
+	Country   string      `json:"country"`
+	Town      string      `json:"town"`
+	StartDate time.Time   `json:"startDate"`
+	EndDate   time.Time   `json:"endDate"`
+	Image     StringArray `json:"image" gorm:"type:json"`
 }
 
-type SelectedAccomodation struct {
-	ID        uint        `gorm:"primaryKey" json:"id"`
-	Name      string      `json:"name"`
-	Image     StringArray `json:"image" gorm:"type:text"`
-	HistoryID uint        `json:"-"`
-}
-
-type SelectedPlace struct {
-	ID           uint        `gorm:"primaryKey" json:"id"`
-	PlaceToVisit string      `json:"placeToVisit"`
-	Town         string      `json:"town"`
-	Image        StringArray `json:"image" gorm:"type:text"`
-	HistoryID    uint        `json:"-"`
+func (h *History) BeforeCreate(tx *gorm.DB) (err error) {
+	var lastID int64
+	tx.Model(&History{}).Select("coalesce(max(auto_id),0)").Scan(&lastID)
+	h.AutoID = uint(lastID + 1)
+	h.ID = fmt.Sprintf("%d", h.AutoID)
+	return
 }
 
 type StringArray []string

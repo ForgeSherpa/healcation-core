@@ -25,8 +25,6 @@ func GetPlaces(c *gin.Context) {
 		return
 	}
 
-	fmt.Println("✅ Request dari Postman:", request)
-
 	placesData, err := services.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
 	if err != nil {
 		fmt.Println("❌ Gagal mengambil data dari Gemini:", err)
@@ -64,12 +62,12 @@ func GetPlaceDetail(c *gin.Context) {
 }
 
 type Place struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image    []string `json:"image"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Time     string   `json:"time"`
+	Town     string   `json:"town"`
+	Type     string   `json:"type"`
 }
 
 type TimelineResponse struct {
@@ -132,12 +130,52 @@ func Timeline(c *gin.Context) {
 		return
 	}
 
+	formattedTimeline := make(map[string][]Place)
+
+	for date, placesRaw := range timeline {
+		placesList, ok := placesRaw.([]interface{})
+		if !ok {
+			continue
+		}
+
+		var places []Place
+		for _, placeRaw := range placesList {
+			placeMap, ok := placeRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// Parsing image sebagai array
+			var images []string
+			if imgRaw, exists := placeMap["image"]; exists {
+				if imgArray, ok := imgRaw.([]interface{}); ok {
+					for _, img := range imgArray {
+						if imgStr, ok := img.(string); ok {
+							images = append(images, imgStr)
+						}
+					}
+				}
+			}
+
+			places = append(places, Place{
+				Image:    images,
+				Landmark: placeMap["landmark"].(string),
+				RoadName: placeMap["roadName"].(string),
+				Time:     placeMap["time"].(string),
+				Town:     placeMap["town"].(string),
+				Type:     placeMap["type"].(string),
+			})
+		}
+
+		formattedTimeline[date] = places
+	}
+
 	formattedResponse := gin.H{
 		"budget":   response["budget"],
 		"country":  response["country"],
 		"town":     response["town"],
 		"title":    response["title"],
-		"timeline": timeline,
+		"timeline": formattedTimeline,
 	}
 
 	c.JSON(http.StatusOK, formattedResponse)
@@ -154,12 +192,12 @@ type SelectPlaceRequest struct {
 }
 
 type TimelineDetail struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image    []string `json:"image"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Time     string   `json:"time"`
+	Town     string   `json:"town"`
+	Type     string   `json:"type"`
 }
 
 type SelectPlaceResponse struct {
@@ -185,7 +223,7 @@ type AccomodationDetail struct {
 func parseDate(dateStr string) time.Time {
 	parsedTime, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		return time.Now() // Jika gagal parsing, gunakan waktu saat ini
+		return time.Now()
 	}
 	return parsedTime
 }
@@ -197,29 +235,21 @@ func SelectPlace(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	history := models.History{
-		Country:     request.Country,
-		Town:        request.Town,
-		StartDate:   parseDate(request.StartDate),
-		EndDate:     parseDate(request.EndDate),
-		Description: request.Title,
-		Image:       models.StringArray{},
+
+	var allImages []string
+	for _, dayDetails := range request.Timelines {
+		for _, detail := range dayDetails {
+			allImages = append(allImages, detail.Image...)
+			fmt.Println("All Images:", allImages)
+		}
 	}
 
-	history.SelectedAccomodation = []models.SelectedAccomodation{
-		{
-			Name:  request.Accomodation,
-			Image: models.StringArray{},
-		},
-	}
-	for _, timelineDetails := range request.Timelines {
-		for _, detail := range timelineDetails {
-			history.SelectedPlaces = append(history.SelectedPlaces, models.SelectedPlace{
-				PlaceToVisit: detail.Landmark,
-				Town:         detail.Town,
-				Image:        models.StringArray{detail.Image},
-			})
-		}
+	history := models.History{
+		Country:   request.Country,
+		Town:      request.Town,
+		StartDate: parseDate(request.StartDate),
+		EndDate:   parseDate(request.EndDate),
+		Image:     models.StringArray(allImages),
 	}
 
 	if err := database.DB.Create(&history).Error; err != nil {

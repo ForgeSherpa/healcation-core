@@ -11,6 +11,39 @@ import (
 	"strings"
 )
 
+func convertImageToArray(data map[string]interface{}, key string) {
+	if items, ok := data[key].([]interface{}); ok {
+		for _, item := range items {
+			if place, ok := item.(map[string]interface{}); ok {
+				if image, exists := place["image"]; exists {
+					switch v := image.(type) {
+					case string:
+						place["image"] = []string{v} // Ubah string menjadi array
+					case []interface{}:
+						strArray := make([]string, len(v))
+						for i, val := range v {
+							strArray[i] = fmt.Sprintf("%v", val)
+						}
+						place["image"] = strArray
+					}
+				}
+			}
+		}
+	}
+}
+
+func removeMarkdownCodeBlock(input string) string {
+	// Regex untuk menghapus ```json di awal dan ``` di akhir
+	re := regexp.MustCompile("(?s)```json\\n(.*?)\\n```")
+	matches := re.FindStringSubmatch(input)
+
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	return strings.TrimSpace(input)
+}
+
 func cleanJSONResponse(response string) string {
 	re := regexp.MustCompile("(?s)```json(.*?)```")
 	cleaned := re.ReplaceAllString(response, "$1")
@@ -100,6 +133,24 @@ func SearchGemini(query string) ([]PlaceSearch, error) {
 }
 
 // Fitur GetPlaces
+type PlaceGetPlaces struct {
+	Description string   `json:"description"`
+	Image       []string `json:"image"` // Mengubah image menjadi array
+	Name        string   `json:"name"`
+	Town        string   `json:"town"`
+	Type        string   `json:"type"`
+}
+
+type AccommodationGetPlaces struct {
+	Image []string `json:"image"` // Mengubah image menjadi array
+	Name  string   `json:"name"`
+}
+
+type GeminiResponseGetPlaces struct {
+	Accomodations []AccommodationGetPlaces `json:"accomodations"`
+	Places        []PlaceGetPlaces         `json:"places"`
+}
+
 type GeminiResponseSearchGetPlaces struct {
 	Candidates []struct {
 		Content struct {
@@ -128,14 +179,14 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
   "town": "%s",
   "accomodations": [
     {
-      "image": "URL gambar akomodasi",
+      "image": ["URL gambar akomodasi"],
       "name": "Nama akomodasi"
     }
   ],
   "places": [
     {
       "description": "Deskripsi singkat tentang tempat wisata",
-      "image": "URL gambar tempat wisata",
+      "image": ["URL gambar tempat wisata"],
       "name": "Nama tempat wisata",
       "town": "%s",
       "type": "Jenis tempat wisata (contoh: Museum, Landmark, District, dll)"
@@ -184,28 +235,33 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 	}
 
 	rawJSON := geminiResp.Candidates[0].Content.Parts[0].Text
-	cleanedJSON := cleanJSONResponse(rawJSON)
 
-	fmt.Println("✅ JSON setelah dibersihkan:", cleanedJSON)
+	// Membersihkan blok kode Markdown (`json ... `) dari respons
+	cleanJSON := removeMarkdownCodeBlock(rawJSON)
 
 	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(cleanedJSON), &result); err != nil {
+	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
 		fmt.Println("❌ Gagal parsing JSON setelah pembersihan:", err)
 		return nil, err
 	}
 
+	convertImageToArray(result, "places")
+	convertImageToArray(result, "accomodations")
+
 	delete(result, "preferences")
 	delete(result, "town")
 	delete(result, "country")
+
+	fmt.Println("✅ JSON setelah diolah:", result)
 
 	return result, nil
 }
 
 // fitur GetPlaceDetail
 type PlaceDetail struct {
-	Name        string `json:"name"`
-	Image       string `json:"image"`
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Image       []string `json:"image"`
+	Description string   `json:"description"`
 }
 
 func GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
@@ -226,7 +282,7 @@ Harap kembalikan data dalam format JSON sebagai berikut:
 
 {
   "name": "%s",
-  "image": "URL gambar tempat",
+  "image": ["URL gambar tempat"],
   "description": "Deskripsi singkat"
 }
 
@@ -315,7 +371,7 @@ Format respons yang diharapkan:
     "timeline": {
         "YYYY-MM-DD": [
             {
-                "image": "URL gambar tempat",
+                "image": ["URL gambar tempat"],
                 "landmark": "Nama tempat",
                 "roadName": "Nama jalan",
                 "time": "HH:MM",

@@ -30,8 +30,6 @@ func Connect() {
 	log.Println("Running database migrations...")
 	if err := connection.AutoMigrate(
 		&models.History{},
-		&models.SelectedAccomodation{},
-		&models.SelectedPlace{},
 		&models.User{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
