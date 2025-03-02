@@ -14,10 +14,12 @@ func SearchPlanner(c *gin.Context) {
 		return
 	}
 
-	// Kirim query ke service gemini.go
-	results := services.SearchGemini(query)
+	results, err := services.SearchGemini(query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch data from Gemini AI"})
+		return
+	}
 
-	// Kirim response ke frontend
 	c.JSON(http.StatusOK, gin.H{
 		"results": results,
 	})

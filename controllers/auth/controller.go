@@ -5,12 +5,17 @@ import (
 	"healcationBackend/models"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type TokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
 
 func Register(c *gin.Context) {
 	var data struct {
@@ -70,8 +75,10 @@ func Login(c *gin.Context) {
 	expAccess := time.Now().Add(time.Hour * 24 * 7)
 	expRefresh := time.Now().Add(time.Hour * 24 * 30)
 
+	userIDStr := strconv.FormatUint(uint64(user.ID), 10)
+
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
+		"sub": userIDStr,
 		"exp": expAccess.Unix(),
 	})
 	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("SECRET")))
@@ -81,7 +88,7 @@ func Login(c *gin.Context) {
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
+		"sub": userIDStr,
 		"exp": expRefresh.Unix(),
 	})
 	refreshTokenString, err := refreshToken.SignedString([]byte(os.Getenv("SECRET")))
@@ -89,9 +96,6 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Refresh Token"})
 		return
 	}
-
-	user.RefreshToken = refreshTokenString
-	database.DB.Save(&user)
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":             accessTokenString,
@@ -111,47 +115,64 @@ func Validate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"userID": userID})
 }
 
-func Logout(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if exists {
-		database.DB.Model(&models.User{}).Where("id = ?", userID).Update("refresh_token", "")
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
-}
-
 func RefreshToken(c *gin.Context) {
-	var data struct {
-		RefreshToken string `json:"refresh_token"`
-	}
+	var data TokenRequest
 
 	if err := c.BindJSON(&data); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read data"})
 		return
 	}
 
-	var user models.User
-	if err := database.DB.First(&user, "refresh_token = ?", data.RefreshToken).Error; err != nil {
+	// Parse & validate refresh token
+	secret := os.Getenv("SECRET")
+	refreshToken, err := jwt.Parse(data.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(secret), nil
+	})
+
+	if err != nil || !refreshToken.Valid {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired Refresh Token"})
 		return
 	}
 
-	expAccess := time.Now().Add(time.Hour * 24 * 7)
+	claims, ok := refreshToken.Claims.(jwt.MapClaims)
+	if !ok || claims["sub"] == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Refresh Token claims"})
+		return
+	}
 
+	userID := claims["sub"].(string)
+
+	// Generate new access token
+	expAccess := time.Now().Add(time.Hour * 24 * 7)
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
+		"sub": userID,
 		"exp": expAccess.Unix(),
 	})
-	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("SECRET")))
+	accessTokenString, err := accessToken.SignedString([]byte(secret))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Access Token"})
 		return
 	}
 
-	database.DB.Model(&user).Update("refresh_token", "")
+	// Generate new refresh token
+	expRefresh := time.Now().Add(time.Hour * 24 * 30) // Refresh token valid for 30 days
+	newRefreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": userID,
+		"exp": expRefresh.Unix(),
+	})
+	newRefreshTokenString, err := newRefreshToken.SignedString([]byte(secret))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Refresh Token"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token":            accessTokenString,
-		"access_token_expired_at": expAccess,
+		"access_token":             accessTokenString,
+		"access_token_expired_at":  expAccess,
+		"refresh_token":            newRefreshTokenString,
+		"refresh_token_expired_at": expRefresh,
 	})
 }

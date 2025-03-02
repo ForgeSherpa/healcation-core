@@ -1,74 +1,143 @@
 package travel
 
 import (
+	"fmt"
+	"healcationBackend/services"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 )
 
 func GetPlaces(c *gin.Context) {
-	response := gin.H{
-		"accomodations": []gin.H{
-			{
-				"name":  "Luxury Hotel Paris",
-				"image": "https://example.com/luxury-hotel.jpg",
-			},
-		},
-		"places": []gin.H{
-			{
-				"name":        "Eiffel Tower",
-				"image":       "https://example.com/eiffel-tower.jpg",
-				"description": "A famous landmark in Paris, known for its stunning views.",
-				"town":        "Paris",
-				"type":        "Landmark",
-			},
-		},
+	var request struct {
+		Preferences []string `json:"preferences"`
+		Country     string   `json:"country"`
+		Town        string   `json:"town"`
 	}
 
-	c.JSON(http.StatusOK, response)
+	if err := c.ShouldBindJSON(&request); err != nil {
+		fmt.Println("❌ Format JSON salah:", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Format JSON salah"})
+		return
+	}
+
+	fmt.Println("✅ Request dari Postman:", request)
+
+	placesData, err := services.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
+	if err != nil {
+		fmt.Println("❌ Gagal mengambil data dari Gemini:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil data dari Gemini API"})
+		return
+	}
+
+	c.JSON(http.StatusOK, placesData)
 }
 
 func GetPlaceDetail(c *gin.Context) {
-	placeName := c.Param("name")
-
-	response := gin.H{
-		"name":        placeName,
-		"image":       "https://example.com/img.jpg",
-		"description": "Contoh deskripsi tempat wisata atau akomodasi.",
+	placeName, err := url.QueryUnescape(c.Param("name"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid place name"})
+		return
 	}
 
-	c.JSON(http.StatusOK, response)
+	var request struct {
+		Country string `json:"country"`
+		City    string `json:"city"`
+		Type    string `json:"type"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	placeDetail, err := services.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch place details"})
+		return
+	}
+
+	c.JSON(http.StatusOK, placeDetail)
+}
+
+type Place struct {
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
+}
+
+type TimelineResponse struct {
+	Budget   string             `json:"budget"`
+	Country  string             `json:"country"`
+	Town     string             `json:"town"`
+	Title    string             `json:"title"`
+	Timeline map[string][]Place `json:"timeline"`
+}
+
+func convertPlaces(places []struct {
+	Name      string `json:"name"`
+	TimeOfDay string `json:"timeOfDay"`
+}) []services.PlaceTimeline {
+	var converted []services.PlaceTimeline
+	for _, place := range places {
+		converted = append(converted, services.PlaceTimeline{
+			Name:      place.Name,
+			TimeOfDay: place.TimeOfDay,
+		})
+	}
+	return converted
 }
 
 func Timeline(c *gin.Context) {
-	response := gin.H{
-		"budget":  "100 - 500 USD",
-		"country": "Indonesia",
-		"town":    "Jakarta",
-		"title":   "Gemini Generated",
-		"timeline": map[string][]map[string]string{
-			"2024-04-01": {
-				{
-					"image":    "barelang1.jpg",
-					"landmark": "Barelang Bridge",
-					"roadName": "Jl. Trans Barelang",
-					"time":     "10:00",
-					"town":     "Batam",
-					"type":     "Tourist Attraction",
-				},
-				{
-					"image":    "barelang1.jpg",
-					"landmark": "Batam Botanical Garden",
-					"roadName": "Jl. Engku Putri",
-					"time":     "14:00",
-					"town":     "Batam",
-					"type":     "Park",
-				},
-			},
-		},
+	var request struct {
+		Accomodation string `json:"accomodation"`
+		Town         string `json:"town"`
+		Country      string `json:"country"`
+		StartDate    string `json:"startDate"`
+		EndDate      string `json:"endDate"`
+		Places       []struct {
+			Name      string `json:"name"`
+			TimeOfDay string `json:"timeOfDay"`
+		} `json:"places"`
 	}
 
-	c.JSON(http.StatusOK, response)
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	response, err := services.GetTimelineFromGemini(
+		request.Accomodation,
+		request.Town,
+		request.Country,
+		request.StartDate,
+		request.EndDate,
+		convertPlaces(request.Places),
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get response from Gemini"})
+		return
+	}
+
+	timeline, ok := response["timeline"].(map[string]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid response format from Gemini API"})
+		return
+	}
+
+	formattedResponse := gin.H{
+		"budget":   response["budget"],
+		"country":  response["country"],
+		"town":     response["town"],
+		"title":    response["title"],
+		"timeline": timeline,
+	}
+
+	c.JSON(http.StatusOK, formattedResponse)
 }
 
 type SelectPlaceRequest struct {

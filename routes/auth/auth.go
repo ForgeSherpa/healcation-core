@@ -1,9 +1,10 @@
 package auth
 
 import (
-	"github.com/gin-gonic/gin"
 	"healcationBackend/controllers/auth"
 	"healcationBackend/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 func RoutesAuth(r *gin.Engine) {
@@ -14,6 +15,5 @@ func RoutesAuth(r *gin.Engine) {
 	{
 		protected.GET("/api/validate", auth.Validate)
 	}
-	r.POST("/api/logout", auth.Logout)
 	r.POST("/api/refresh-token", auth.RefreshToken)
 }
