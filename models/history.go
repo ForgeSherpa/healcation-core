@@ -5,26 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type History struct {
-	AutoID    uint        `gorm:"primaryKey;autoIncrement" json:"-"`
-	ID        string      `json:"id" gorm:"uniqueIndex"`
-	Country   string      `json:"country"`
-	Town      string      `json:"town"`
-	StartDate time.Time   `json:"startDate"`
-	EndDate   time.Time   `json:"endDate"`
-	Image     StringArray `json:"image" gorm:"type:json"`
-}
-
-func (h *History) BeforeCreate(tx *gorm.DB) (err error) {
-	var lastID int64
-	tx.Model(&History{}).Select("coalesce(max(auto_id),0)").Scan(&lastID)
-	h.AutoID = uint(lastID + 1)
-	h.ID = fmt.Sprintf("%d", h.AutoID)
-	return
+	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Country   string    `json:"country"`
+	Town      string    `json:"town"`
+	StartDate time.Time `json:"startDate"`
+	EndDate   time.Time `json:"endDate"`
+	Image     string    `json:"image" gorm:"type:json"`
 }
 
 type StringArray []string

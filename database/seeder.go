@@ -23,7 +23,7 @@ func SeedHistory() {
 		Town:      "Bali",
 		StartDate: time.Date(2023, time.January, 1, 7, 0, 0, 0, time.UTC),
 		EndDate:   time.Date(2023, time.January, 7, 7, 0, 0, 0, time.UTC),
-		Image:     models.StringArray{"https://example.com/bali.jpg"},
+		Image:     "https://example.com/bali.jpg",
 	}
 
 	if err := DB.Create(&history).Error; err != nil {

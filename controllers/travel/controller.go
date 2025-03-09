@@ -1,6 +1,7 @@
 package travel
 
 import (
+	"encoding/json"
 	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
@@ -12,6 +13,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Response struct {
+	Status  int         `json:"status"`
+	Data    interface{} `json:"data,omitempty"`
+	Message string      `json:"message"`
+}
+
+func sendResponse(c *gin.Context, status int, data interface{}, message string) {
+	c.JSON(status, Response{
+		Status:  status,
+		Data:    data,
+		Message: message,
+	})
+}
+
 func GetPlaces(c *gin.Context) {
 	var request struct {
 		Preferences []string `json:"preferences"`
@@ -20,25 +35,23 @@ func GetPlaces(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		fmt.Println("❌ Format JSON salah:", err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Format JSON salah"})
+		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah: "+err.Error())
 		return
 	}
 
 	placesData, err := services.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
 	if err != nil {
-		fmt.Println("❌ Gagal mengambil data dari Gemini:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil data dari Gemini API"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API: "+err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, placesData)
+	sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
 }
 
 func GetPlaceDetail(c *gin.Context) {
 	placeName, err := url.QueryUnescape(c.Param("name"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid place name"})
+		sendResponse(c, http.StatusBadRequest, nil, "Invalid place name")
 		return
 	}
 
@@ -48,65 +61,35 @@ func GetPlaceDetail(c *gin.Context) {
 		Type    string `json:"type"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		sendResponse(c, http.StatusBadRequest, nil, "Invalid request format: "+err.Error())
 		return
 	}
 
 	placeDetail, err := services.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch place details"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details: "+err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, placeDetail)
+	sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
 }
 
-type Place struct {
-	Image    []string `json:"image"`
-	Landmark string   `json:"landmark"`
-	RoadName string   `json:"roadName"`
-	Time     string   `json:"time"`
-	Town     string   `json:"town"`
-	Type     string   `json:"type"`
-}
-
-type TimelineResponse struct {
-	Budget   string             `json:"budget"`
-	Country  string             `json:"country"`
-	Town     string             `json:"town"`
-	Title    string             `json:"title"`
-	Timeline map[string][]Place `json:"timeline"`
-}
-
-func convertPlaces(places []struct {
-	Name      string `json:"name"`
-	TimeOfDay string `json:"timeOfDay"`
-}) []services.PlaceTimeline {
-	var converted []services.PlaceTimeline
-	for _, place := range places {
-		converted = append(converted, services.PlaceTimeline{
-			Name:      place.Name,
-			TimeOfDay: place.TimeOfDay,
-		})
-	}
-	return converted
+type TimelineRequest struct {
+	Accomodation string `json:"accomodation"`
+	Town         string `json:"town"`
+	Country      string `json:"country"`
+	StartDate    string `json:"startDate"`
+	EndDate      string `json:"endDate"`
+	Places       []struct {
+		Name      string `json:"name"`
+		TimeOfDay string `json:"timeOfDay"`
+	} `json:"places"`
 }
 
 func Timeline(c *gin.Context) {
-	var request struct {
-		Accomodation string `json:"accomodation"`
-		Town         string `json:"town"`
-		Country      string `json:"country"`
-		StartDate    string `json:"startDate"`
-		EndDate      string `json:"endDate"`
-		Places       []struct {
-			Name      string `json:"name"`
-			TimeOfDay string `json:"timeOfDay"`
-		} `json:"places"`
-	}
-
+	var request TimelineRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah: "+err.Error())
 		return
 	}
 
@@ -116,69 +99,14 @@ func Timeline(c *gin.Context) {
 		request.Country,
 		request.StartDate,
 		request.EndDate,
-		convertPlaces(request.Places),
+		request.Places,
 	)
-
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get response from Gemini"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini: "+err.Error())
 		return
 	}
 
-	timeline, ok := response["timeline"].(map[string]interface{})
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid response format from Gemini API"})
-		return
-	}
-
-	formattedTimeline := make(map[string][]Place)
-
-	for date, placesRaw := range timeline {
-		placesList, ok := placesRaw.([]interface{})
-		if !ok {
-			continue
-		}
-
-		var places []Place
-		for _, placeRaw := range placesList {
-			placeMap, ok := placeRaw.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			// Parsing image sebagai array
-			var images []string
-			if imgRaw, exists := placeMap["image"]; exists {
-				if imgArray, ok := imgRaw.([]interface{}); ok {
-					for _, img := range imgArray {
-						if imgStr, ok := img.(string); ok {
-							images = append(images, imgStr)
-						}
-					}
-				}
-			}
-
-			places = append(places, Place{
-				Image:    images,
-				Landmark: placeMap["landmark"].(string),
-				RoadName: placeMap["roadName"].(string),
-				Time:     placeMap["time"].(string),
-				Town:     placeMap["town"].(string),
-				Type:     placeMap["type"].(string),
-			})
-		}
-
-		formattedTimeline[date] = places
-	}
-
-	formattedResponse := gin.H{
-		"budget":   response["budget"],
-		"country":  response["country"],
-		"town":     response["town"],
-		"title":    response["title"],
-		"timeline": formattedTimeline,
-	}
-
-	c.JSON(http.StatusOK, formattedResponse)
+	sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
 }
 
 type SelectPlaceRequest struct {
@@ -192,12 +120,12 @@ type SelectPlaceRequest struct {
 }
 
 type TimelineDetail struct {
-	Image    []string `json:"image"`
-	Landmark string   `json:"landmark"`
-	RoadName string   `json:"roadName"`
-	Time     string   `json:"time"`
-	Town     string   `json:"town"`
-	Type     string   `json:"type"`
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
 }
 
 type SelectPlaceResponse struct {
@@ -232,16 +160,21 @@ func SelectPlace(c *gin.Context) {
 	var request SelectPlaceRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		sendResponse(c, http.StatusBadRequest, nil, "Invalid request format: "+err.Error())
 		return
 	}
 
 	var allImages []string
 	for _, dayDetails := range request.Timelines {
 		for _, detail := range dayDetails {
-			allImages = append(allImages, detail.Image...)
+			allImages = append(allImages, detail.Image)
 			fmt.Println("All Images:", allImages)
 		}
+	}
+	imageJSON, err := json.Marshal(allImages)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to process images")
+		return
 	}
 
 	history := models.History{
@@ -249,11 +182,11 @@ func SelectPlace(c *gin.Context) {
 		Town:      request.Town,
 		StartDate: parseDate(request.StartDate),
 		EndDate:   parseDate(request.EndDate),
-		Image:     models.StringArray(allImages),
+		Image:     string(imageJSON),
 	}
 
 	if err := database.DB.Create(&history).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save history"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to save history")
 		return
 	}
 
@@ -275,5 +208,5 @@ func SelectPlace(c *gin.Context) {
 		},
 	}
 
-	c.JSON(http.StatusOK, response)
+	sendResponse(c, http.StatusOK, response, "Place selection saved successfully")
 }

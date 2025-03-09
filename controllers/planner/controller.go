@@ -7,22 +7,34 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Response struct {
+	Status  int         `json:"status"`
+	Data    interface{} `json:"data,omitempty"`
+	Message string      `json:"message"`
+}
+
+func sendResponse(c *gin.Context, status int, data interface{}, message string) {
+	c.JSON(status, Response{
+		Status:  status,
+		Data:    data,
+		Message: message,
+	})
+}
+
 func SearchPlanner(c *gin.Context) {
 	query := c.Query("q")
 	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter is required"})
+		sendResponse(c, http.StatusBadRequest, nil, "Query parameter is required")
 		return
 	}
 
 	results, err := services.SearchGemini(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch data from Gemini AI"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch data from Gemini AI: "+err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"results": results,
-	})
+	sendResponse(c, http.StatusOK, gin.H{"results": results}, "Search results retrieved successfully")
 }
 
 func GetPopularDestinations(c *gin.Context) {
@@ -47,7 +59,5 @@ func GetPopularDestinations(c *gin.Context) {
 		},
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"popular_destinations": popularDestinations,
-	})
+	sendResponse(c, http.StatusOK, gin.H{"popular_destinations": popularDestinations}, "Popular destinations retrieved successfully")
 }

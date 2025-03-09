@@ -3,37 +3,108 @@ package services
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
 )
 
-func convertImageToArray(data map[string]interface{}, key string) {
-	if items, ok := data[key].([]interface{}); ok {
-		for _, item := range items {
-			if place, ok := item.(map[string]interface{}); ok {
-				if image, exists := place["image"]; exists {
-					switch v := image.(type) {
-					case string:
-						place["image"] = []string{v} // Ubah string menjadi array
-					case []interface{}:
-						strArray := make([]string, len(v))
-						for i, val := range v {
-							strArray[i] = fmt.Sprintf("%v", val)
-						}
-						place["image"] = strArray
-					}
-				}
-			}
-		}
+func GetGoogleImages(query string) ([]string, error) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	cx := os.Getenv("GOOGLE_API_CX")
+
+	if apiKey == "" || cx == "" {
+		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
 	}
+
+	apiURL := fmt.Sprintf("https://www.googleapis.com/customsearch/v1?q=%s&key=%s&cx=%s&searchType=image&num=1",
+		url.QueryEscape(query), apiKey, cx)
+
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var googleResp struct {
+		Items []struct {
+			Link string `json:"link"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal(body, &googleResp); err != nil {
+		return nil, err
+	}
+
+	if len(googleResp.Items) == 0 {
+		return nil, fmt.Errorf("tidak ada gambar ditemukan untuk query: %s", query)
+	}
+
+	return []string{googleResp.Items[0].Link}, nil
+}
+
+func GetGoogleImagesPlaces(query string) ([]string, error) {
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	cx := os.Getenv("GOOGLE_API_CX")
+
+	if apiKey == "" || cx == "" {
+		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
+	}
+
+	apiURL := fmt.Sprintf("https://www.googleapis.com/customsearch/v1?q=%s&key=%s&cx=%s&searchType=image&num=2",
+		url.QueryEscape(query), apiKey, cx)
+
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var googleResp struct {
+		Items []struct {
+			Link string `json:"link"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal(body, &googleResp); err != nil {
+		return nil, err
+	}
+
+	var imageURLs []string
+	for i := 0; i < len(googleResp.Items) && i < 2; i++ {
+		imageURLs = append(imageURLs, googleResp.Items[i].Link)
+	}
+
+	if len(imageURLs) == 0 {
+		return nil, fmt.Errorf("tidak ada gambar ditemukan untuk query: %s", query)
+	}
+
+	return imageURLs, nil
 }
 
 func removeMarkdownCodeBlock(input string) string {
-	// Regex untuk menghapus ```json di awal dan ``` di akhir
 	re := regexp.MustCompile("(?s)```json\\n(.*?)\\n```")
 	matches := re.FindStringSubmatch(input)
 
@@ -43,7 +114,6 @@ func removeMarkdownCodeBlock(input string) string {
 
 	return strings.TrimSpace(input)
 }
-
 func cleanJSONResponse(response string) string {
 	re := regexp.MustCompile("(?s)```json(.*?)```")
 	cleaned := re.ReplaceAllString(response, "$1")
@@ -164,7 +234,6 @@ type GeminiResponseSearchGetPlaces struct {
 func GetPlacesFromGemini(preferences []string, country, town string) (map[string]interface{}, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		fmt.Println("❌ API Key tidak ditemukan di environment!")
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
@@ -179,14 +248,12 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
   "town": "%s",
   "accomodations": [
     {
-      "image": ["URL gambar akomodasi"],
       "name": "Nama akomodasi"
     }
   ],
   "places": [
     {
       "description": "Deskripsi singkat tentang tempat wisata",
-      "image": ["URL gambar tempat wisata"],
       "name": "Nama tempat wisata",
       "town": "%s",
       "type": "Jenis tempat wisata (contoh: Museum, Landmark, District, dll)"
@@ -204,64 +271,77 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 		},
 	})
 	if err != nil {
-		fmt.Println("❌ Gagal membuat JSON request:", err)
 		return nil, err
 	}
 
 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		fmt.Println("❌ Gagal menghubungi Gemini API:", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("❌ Gagal membaca response dari Gemini:", err)
 		return nil, err
 	}
-
-	fmt.Println("📥 Respon dari Gemini API:", string(body))
-
-	var geminiResp GeminiResponseSearchGetPlaces
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		fmt.Println("❌ Gagal parsing JSON response:", err)
-		return nil, err
+	var geminiResponse struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
 	}
 
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		fmt.Println("❌ Respon dari Gemini kosong atau tidak sesuai format")
+	if err := json.Unmarshal(body, &geminiResponse); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
+	}
+
+	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
 		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
 	}
 
-	rawJSON := geminiResp.Candidates[0].Content.Parts[0].Text
+	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
 
-	// Membersihkan blok kode Markdown (`json ... `) dari respons
-	cleanJSON := removeMarkdownCodeBlock(rawJSON)
-
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(cleanJSON), &result); err != nil {
-		fmt.Println("❌ Gagal parsing JSON setelah pembersihan:", err)
-		return nil, err
+	var result struct {
+		Places        []PlaceGetPlaces         `json:"places"`
+		Accomodations []AccommodationGetPlaces `json:"accomodations"`
 	}
 
-	convertImageToArray(result, "places")
-	convertImageToArray(result, "accomodations")
+	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
+	}
 
-	delete(result, "preferences")
-	delete(result, "town")
-	delete(result, "country")
+	for i := range result.Places {
+		name := result.Places[i].Name
+		imageURLs, err := GetGoogleImagesPlaces(name)
+		if err == nil {
+			result.Places[i].Image = imageURLs
+		}
+	}
 
-	fmt.Println("✅ JSON setelah diolah:", result)
+	for i := range result.Accomodations {
+		name := result.Accomodations[i].Name
+		imageURLs, err := GetGoogleImages(name)
+		if err == nil {
+			result.Accomodations[i].Image = imageURLs
+		}
+	}
 
-	return result, nil
+	response := map[string]interface{}{
+		"accomodations": result.Accomodations,
+		"places":        result.Places,
+	}
+
+	return response, nil
 }
 
 // fitur GetPlaceDetail
 type PlaceDetail struct {
-	Name        string   `json:"name"`
-	Image       []string `json:"image"`
-	Description string   `json:"description"`
+	Name        string `json:"name"`
+	Image       string `json:"image"`
+	Description string `json:"description"`
 }
 
 func GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
@@ -282,7 +362,6 @@ Harap kembalikan data dalam format JSON sebagai berikut:
 
 {
   "name": "%s",
-  "image": ["URL gambar tempat"],
   "description": "Deskripsi singkat"
 }
 
@@ -328,60 +407,68 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, name, city, country, typeIn
 		return PlaceDetail{}, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
 	}
 
-	rawJSON := geminiResp.Candidates[0].Content.Parts[0].Text
-	cleanedJSON := cleanJSONResponse(rawJSON)
+	rawJSON := removeMarkdownCodeBlock(geminiResp.Candidates[0].Content.Parts[0].Text)
 
 	var placeDetail PlaceDetail
-	if err := json.Unmarshal([]byte(cleanedJSON), &placeDetail); err != nil {
+	if err := json.Unmarshal([]byte(rawJSON), &placeDetail); err != nil {
 		return PlaceDetail{}, err
+	}
+
+	imageURLs, err := GetGoogleImages(name)
+	if err == nil {
+		placeDetail.Image = imageURLs[0]
 	}
 
 	return placeDetail, nil
 }
 
-// Fitur Timeline
+// fitur timeline
 type PlaceTimeline struct {
 	Name      string `json:"name"`
 	TimeOfDay string `json:"timeOfDay"`
 }
 
-func GetTimelineFromGemini(accomodation, town, country, startDate, endDate string, places []PlaceTimeline) (map[string]interface{}, error) {
+type Place struct {
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
+}
+
+func GetTimelineFromGemini(accommodation, town, country, startDate, endDate string, places []struct {
+	Name      string `json:"name"`
+	TimeOfDay string `json:"timeOfDay"`
+}) (map[string]interface{}, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		fmt.Println("❌ API Key tidak ditemukan di environment!")
-		return nil, fmt.Errorf("API Key tidak ditemukan")
+		return nil, errors.New("API Key tidak ditemukan")
 	}
 
 	apiURL := os.Getenv("GEMINI_API_KEY")
 
-	placesList := ""
-	for _, place := range places {
-		placesList += fmt.Sprintf("{'name': '%s', 'timeOfDay': '%s'}, ", place.Name, place.TimeOfDay)
-	}
+	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s, %s pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
+Harap berikan respons dalam format JSON dengan struktur berikut:
 
-	prompt := fmt.Sprintf(`Buatkan itinerary perjalanan untuk akomodasi %s di kota %s, negara %s, mulai dari tanggal %s sampai %s.
-Tempat yang akan dikunjungi adalah sebagai berikut: %s
-
-Format respons yang diharapkan:
 {
-    "budget": "min - max",
-    "country": "%s",
-    "town": "%s",
-    "title": "Gemini Generated",
-    "timeline": {
-        "YYYY-MM-DD": [
-            {
-                "image": ["URL gambar tempat"],
-                "landmark": "Nama tempat",
-                "roadName": "Nama jalan",
-                "time": "HH:MM",
-                "town": "Nama kota",
-                "type": "Jenis tempat (contoh: Tourist Attraction, Park, Museum)"
-            }
-        ]
-    }
+  "budget": "min - max dalam IDR",
+  "country": "%s",
+  "town": "%s",
+  "title": "Gemini Generated",
+  "timeline": {
+    "YYYY-MM-DD": [
+      {
+        "landmark": "Nama tempat",
+        "roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
+        "time": "Waktu kunjungan",
+        "town": "%s",
+        "type": "Jenis tempat (Museum, Landmark, dll)"
+      }
+    ]
+  }
 }
-Hanya kembalikan JSON di atas tanpa teks tambahan.`, accomodation, town, country, startDate, endDate, placesList, country, town)
+Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, endDate, places, country, town, town)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -392,62 +479,70 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, accomodation, town, country
 		},
 	})
 	if err != nil {
-		fmt.Println("❌ Gagal membuat JSON request:", err)
 		return nil, err
 	}
 
 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		fmt.Println("❌ Gagal menghubungi Gemini API:", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("❌ Gagal membaca response dari Gemini:", err)
 		return nil, err
 	}
-	fmt.Println("🔍 Response dari Gemini API:", string(body)) // Debugging output
 
-	var geminiResponse map[string]interface{}
+	var geminiResponse struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
 	if err := json.Unmarshal(body, &geminiResponse); err != nil {
-		fmt.Println("❌ Gagal parsing JSON dari Gemini:", err)
-		return nil, err
+		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
 	}
 
-	candidates, ok := geminiResponse["candidates"].([]interface{})
-	if !ok || len(candidates) == 0 {
-		fmt.Println("❌ Tidak ada kandidat dalam response Gemini API")
-		return nil, fmt.Errorf("response tidak memiliki kandidat yang valid")
+	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
 	}
 
-	content, ok := candidates[0].(map[string]interface{})["content"].(map[string]interface{})
-	if !ok {
-		fmt.Println("❌ Response tidak memiliki format konten yang diharapkan")
-		return nil, fmt.Errorf("format konten tidak valid")
+	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
+
+	var result struct {
+		Budget   string             `json:"budget"`
+		Country  string             `json:"country"`
+		Town     string             `json:"town"`
+		Title    string             `json:"title"`
+		Timeline map[string][]Place `json:"timeline"`
 	}
 
-	parts, ok := content["parts"].([]interface{})
-	if !ok || len(parts) == 0 {
-		fmt.Println("❌ Bagian teks tidak ditemukan dalam respons")
-		return nil, fmt.Errorf("bagian teks kosong")
+	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
 	}
 
-	textResponse, ok := parts[0].(map[string]interface{})["text"].(string)
-	if !ok {
-		fmt.Println("❌ Respons tidak memiliki teks yang valid")
-		return nil, fmt.Errorf("format teks tidak valid")
+	for date, places := range result.Timeline {
+		for i := range places {
+			name := places[i].Landmark
+			imageURLs, err := GetGoogleImages(name)
+			if err == nil && len(imageURLs) > 0 {
+				places[i].Image = imageURLs[0]
+			}
+		}
+		result.Timeline[date] = places
 	}
 
-	cleanedText := strings.TrimPrefix(textResponse, "```json\n")
-	cleanedText = strings.TrimSuffix(cleanedText, "\n```")
-
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(cleanedText), &result); err != nil {
-		fmt.Println("❌ Gagal parsing JSON hasil:", err)
-		return nil, err
+	response := map[string]interface{}{
+		"budget":   result.Budget,
+		"country":  result.Country,
+		"town":     result.Town,
+		"title":    result.Title,
+		"timeline": result.Timeline,
 	}
 
-	return result, nil
+	return response, nil
 }

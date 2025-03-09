@@ -17,21 +17,35 @@ type TokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type Response struct {
+	Status  int         `json:"status"`
+	Data    interface{} `json:"data,omitempty"`
+	Message string      `json:"message"`
+}
+
+func sendResponse(c *gin.Context, status int, data interface{}, message string) {
+	c.JSON(status, Response{
+		Status:  status,
+		Data:    data,
+		Message: message,
+	})
+}
+
 func Register(c *gin.Context) {
 	var data struct {
-		Username string
-		Email    string
-		Password string
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
-	if c.Bind(&data) != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read data"})
+	if err := c.ShouldBindJSON(&data); err != nil {
+		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah")
 		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(data.Password), 10)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengenkripsi password")
 		return
 	}
 
@@ -41,13 +55,12 @@ func Register(c *gin.Context) {
 		Password: string(hash),
 	}
 
-	result := database.DB.Create(&user)
-	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create user"})
+	if err := database.DB.Create(&user).Error; err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat pengguna baru")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Registration successful"})
+	sendResponse(c, http.StatusOK, nil, "Registrasi berhasil")
 }
 
 func Login(c *gin.Context) {
@@ -56,123 +69,118 @@ func Login(c *gin.Context) {
 		Password string `json:"password"`
 	}
 
-	if err := c.BindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read data"})
+	if err := c.ShouldBindJSON(&data); err != nil {
+		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah")
 		return
 	}
 
 	var user models.User
 	if err := database.DB.First(&user, "email = ?", data.Email).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Email or Password"})
+		sendResponse(c, http.StatusUnauthorized, nil, "Email atau password salah")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Email or Password"})
+		sendResponse(c, http.StatusUnauthorized, nil, "Email atau password salah")
 		return
 	}
 
 	expAccess := time.Now().Add(time.Hour * 24 * 7)
 	expRefresh := time.Now().Add(time.Hour * 24 * 30)
-
 	userIDStr := strconv.FormatUint(uint64(user.ID), 10)
 
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	secret := []byte(os.Getenv("SECRET"))
+
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userIDStr,
 		"exp": expAccess.Unix(),
-	})
-	accessTokenString, err := accessToken.SignedString([]byte(os.Getenv("SECRET")))
+	}).SignedString(secret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Access Token"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Access Token")
 		return
 	}
 
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userIDStr,
 		"exp": expRefresh.Unix(),
-	})
-	refreshTokenString, err := refreshToken.SignedString([]byte(os.Getenv("SECRET")))
+	}).SignedString(secret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Refresh Token"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Refresh Token")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":             accessTokenString,
+	sendResponse(c, http.StatusOK, gin.H{
+		"access_token":             accessToken,
 		"access_token_expired_at":  expAccess,
-		"refresh_token":            refreshTokenString,
+		"refresh_token":            refreshToken,
 		"refresh_token_expired_at": expRefresh,
-	})
-}
-
-func Validate(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"userID": userID})
+	}, "Login berhasil")
 }
 
 func RefreshToken(c *gin.Context) {
 	var data TokenRequest
 
-	if err := c.BindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read data"})
+	if err := c.ShouldBindJSON(&data); err != nil {
+		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah")
 		return
 	}
 
-	// Parse & validate refresh token
-	secret := os.Getenv("SECRET")
+	secret := []byte(os.Getenv("SECRET"))
 	refreshToken, err := jwt.Parse(data.RefreshToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return []byte(secret), nil
+		return secret, nil
 	})
 
 	if err != nil || !refreshToken.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired Refresh Token"})
+		sendResponse(c, http.StatusUnauthorized, nil, "Refresh Token tidak valid atau kadaluarsa")
 		return
 	}
 
 	claims, ok := refreshToken.Claims.(jwt.MapClaims)
 	if !ok || claims["sub"] == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Refresh Token claims"})
+		sendResponse(c, http.StatusUnauthorized, nil, "Refresh Token tidak memiliki klaim yang valid")
 		return
 	}
 
 	userID := claims["sub"].(string)
-
-	// Generate new access token
 	expAccess := time.Now().Add(time.Hour * 24 * 7)
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	expRefresh := time.Now().Add(time.Hour * 24 * 30)
+
+	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userID,
 		"exp": expAccess.Unix(),
-	})
-	accessTokenString, err := accessToken.SignedString([]byte(secret))
+	}).SignedString(secret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Access Token"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Access Token baru")
 		return
 	}
 
-	// Generate new refresh token
-	expRefresh := time.Now().Add(time.Hour * 24 * 30) // Refresh token valid for 30 days
-	newRefreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	newRefreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userID,
 		"exp": expRefresh.Unix(),
-	})
-	newRefreshTokenString, err := newRefreshToken.SignedString([]byte(secret))
+	}).SignedString(secret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create Refresh Token"})
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Refresh Token baru")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"access_token":             accessTokenString,
+	sendResponse(c, http.StatusOK, gin.H{
+		"access_token":             accessToken,
 		"access_token_expired_at":  expAccess,
-		"refresh_token":            newRefreshTokenString,
+		"refresh_token":            newRefreshToken,
 		"refresh_token_expired_at": expRefresh,
-	})
+	}, "Token berhasil diperbarui")
+}
+
+func Validate(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized")
+		return
+	}
+
+	data := gin.H{"userID": userID}
+	sendResponse(c, http.StatusOK, data, "User profile retrieved successfully")
 }
