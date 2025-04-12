@@ -2,14 +2,20 @@ package planner
 
 import (
 	"healcationBackend/controllers/planner"
+	"healcationBackend/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
 func PlannerRoutes(r *gin.Engine) {
-	plannerGroup := r.Group("/planner")
+	publicPlanner := r.Group("/planner")
 	{
-		plannerGroup.GET("/popular", planner.GetPopularDestinations)
-		plannerGroup.GET("/search", planner.SearchPlanner)
+		publicPlanner.GET("/popular", planner.GetPopularDestinations)
+	}
+
+	privatePlanner := r.Group("/planner")
+	privatePlanner.Use(middleware.Validate())
+	{
+		privatePlanner.GET("/search", planner.SearchPlanner)
 	}
 }

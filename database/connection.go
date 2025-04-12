@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -8,35 +9,37 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 var DB *gorm.DB
 
 func Connect() {
-	var err error
-
-	dbPath := os.Getenv("DB_PATH")
-	log.Println("Connecting to SQLite database:", dbPath)
-
-	connection, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+	primaryURL := os.Getenv("TURSO_DATABASE_URL")
+	authToken := os.Getenv("TURSO_AUTH_TOKEN")
+	if primaryURL == "" || authToken == "" {
+		log.Fatal("TURSO_DATABASE_URL dan TURSO_AUTH_TOKEN harus di-set")
 	}
 
+	dsn := fmt.Sprintf("%s?authToken=%s", primaryURL, authToken)
+
+	db, err := gorm.Open(sqlite.Dialector{
+		DriverName: "libsql",
+		DSN:        dsn,
+	}, &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to Turso database: %v", err)
+	}
 	log.Println("Database connected successfully")
 
-	DB = connection
+	DB = db
 
-	log.Println("Running database migrations...")
-	if err := connection.AutoMigrate(
-		&models.History{},
-		&models.User{},
-	); err != nil {
+	if err := DB.AutoMigrate(&models.History{}, &models.User{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
-
 	log.Println("Database migrations completed")
 
-	Seed()
+	// Seed()
 	log.Println("Seed data inserted successfully")
 }
