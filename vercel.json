@@ -1,14 +1,9 @@
 {
-    "functions": {
-      "api/handler.go": {
-        "runtime": "go"
-      }
-    },
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/api/handler.go"
-      }
-    ]
-  }
-  
+  "version": 2,
+  "builds": [
+    { "src": "healcationBackend/api/*.go", "use": "@vercel/go" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/healcationBackend/api/$1.go" }
+  ]
+}
