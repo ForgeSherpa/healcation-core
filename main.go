@@ -14,7 +14,6 @@ func init() {
 func main() {
 	r := gin.Default()
 	routes.Routes(r)
-	r.Run()
 
-	// r.Run("0.0.0.0:8080")
+	r.Run(":3000")
 }
