@@ -41,5 +41,5 @@ func Connect() {
 	log.Println("Database migrations completed")
 
 	// Seed()
-	log.Println("Seed data inserted successfully")
+	// log.Println("Seed data inserted successfully")
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func PlannerRoutes(r *gin.Engine) {
+func Routes(r *gin.Engine) {
 	publicPlanner := r.Group("/planner")
 	{
 		publicPlanner.GET("/popular", planner.GetPopularDestinations)

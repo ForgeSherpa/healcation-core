@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TravelRoutes(r *gin.Engine) {
+func Routes(r *gin.Engine) {
 	travelGroup := r.Group("/travel", middleware.Validate())
 	{
 		travelGroup.POST("/places", travel.GetPlaces)

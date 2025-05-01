@@ -16,9 +16,9 @@ func Routes(r *gin.Engine) {
 		c.JSON(http.StatusOK, gin.H{"message": "API Healcation jalan!"})
 	})
 
-	auth.RoutesAuth(r)
-	history.HistoryRoutes(r)
-	profile.ProfileRoutes(r)
-	planner.PlannerRoutes(r)
-	travel.TravelRoutes(r)
+	auth.Routes(r)
+	history.Routes(r)
+	profile.Routes(r)
+	planner.Routes(r)
+	travel.Routes(r)
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -43,6 +44,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	data.Username = strings.ToLower(data.Username)
+	data.Email = strings.ToLower(data.Email)
+
+	var existing models.User
+	if err := database.DB.Where("email = ?", data.Email).First(&existing).Error; err == nil {
+		sendResponse(c, http.StatusConflict, nil, "Email sudah terdaftar")
+		return
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(data.Password), 10)
 	if err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengenkripsi password")
@@ -73,6 +83,8 @@ func Login(c *gin.Context) {
 		sendResponse(c, http.StatusBadRequest, nil, "Format JSON salah")
 		return
 	}
+
+	data.Email = strings.ToLower(data.Email)
 
 	var user models.User
 	if err := database.DB.First(&user, "email = ?", data.Email).Error; err != nil {

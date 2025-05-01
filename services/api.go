@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,7 +34,7 @@ func GetGoogleImages(query string) ([]string, error) {
 		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func SearchGemini(query string) ([]PlaceSearch, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +385,7 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, name, city, country, typeIn
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return PlaceDetail{}, err
 	}
@@ -488,7 +488,7 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, e
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

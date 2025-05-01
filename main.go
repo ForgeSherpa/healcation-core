@@ -7,11 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func init() {
+func main() {
 	database.LoadEnvVariables()
 	database.Connect()
-}
-func main() {
+
 	r := gin.Default()
 	routes.Routes(r)
 
