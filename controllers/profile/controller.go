@@ -4,8 +4,10 @@ import (
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Response struct {
@@ -43,14 +45,12 @@ func GetProfile(c *gin.Context) {
 		UpdatedAt string `json:"updated_at"`
 	}
 
-	data := []UserResponse{
-		{
-			ID:        user.ID,
-			Name:      user.Username,
-			Email:     user.Email,
-			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
-		},
+	data := UserResponse{
+		ID:        user.ID,
+		Name:      user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
 	sendResponse(c, http.StatusOK, data, "User profile retrieved successfully")
@@ -63,9 +63,16 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
+	var user models.User
+	if err := database.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		sendResponse(c, http.StatusNotFound, nil, "User not found")
+		return
+	}
+
 	var data struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
+		Name        string `json:"name,omitempty"`
+		Email       string `json:"email,omitempty"`
+		NewPassword string `json:"new password,omitempty"`
 	}
 
 	if err := c.BindJSON(&data); err != nil {
@@ -73,15 +80,30 @@ func UpdateProfile(c *gin.Context) {
 		return
 	}
 
+	data.Email = strings.ToLower(data.Email)
+
 	if data.Name == "" || data.Email == "" {
 		sendResponse(c, http.StatusBadRequest, nil, "Name and Email cannot be empty")
 		return
 	}
 
-	if err := database.DB.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"username": data.Name,
 		"email":    data.Email,
-	}).Error; err != nil {
+	}
+
+	if data.NewPassword != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(data.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to encrypt new password")
+			return
+		}
+		updates["password"] = string(hashed)
+	}
+
+	if err := database.DB.Model(&models.User{}).
+		Where("id = ?", userID).
+		Updates(updates).Error; err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to update profile: "+err.Error())
 		return
 	}

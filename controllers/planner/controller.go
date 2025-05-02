@@ -43,19 +43,19 @@ func GetPopularDestinations(c *gin.Context) {
 			"id":      "1",
 			"town":    "Bali",
 			"country": "Indonesia",
-			"image":   "https://example.com/bali.jpg",
+			"image":   "https://imgur.com/FqVjytG",
 		},
 		{
 			"id":      "2",
 			"town":    "Yogyakarta",
 			"country": "Indonesia",
-			"image":   "https://example.com/jogja.jpg",
+			"image":   "https://imgur.com/BxsyrtK",
 		},
 		{
 			"id":      "3",
 			"town":    "Lombok",
 			"country": "Indonesia",
-			"image":   "https://example.com/lombok.jpg",
+			"image":   "https://imgur.com/uM0wYL1",
 		},
 	}
 

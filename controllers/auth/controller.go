@@ -96,16 +96,22 @@ func Login(c *gin.Context) {
 		sendResponse(c, http.StatusUnauthorized, nil, "Email atau password salah")
 		return
 	}
+	env := os.Getenv("APP_ENV") // "staging" or "production"
+	var accessExp, refreshExp time.Time
+	if env == "staging" {
+		accessExp = time.Now().Add(2 * time.Hour)
+		refreshExp = time.Now().Add(2 * time.Hour)
+	} else {
+		accessExp = time.Now().Add(7 * 24 * time.Hour)
+		refreshExp = time.Now().Add(30 * 24 * time.Hour)
+	}
 
-	expAccess := time.Now().Add(time.Hour * 24 * 7)
-	expRefresh := time.Now().Add(time.Hour * 24 * 30)
 	userIDStr := strconv.FormatUint(uint64(user.ID), 10)
-
 	secret := []byte(os.Getenv("SECRET"))
 
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userIDStr,
-		"exp": expAccess.Unix(),
+		"exp": accessExp.Unix(),
 	}).SignedString(secret)
 	if err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Access Token")
@@ -114,7 +120,7 @@ func Login(c *gin.Context) {
 
 	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userIDStr,
-		"exp": expRefresh.Unix(),
+		"exp": refreshExp.Unix(),
 	}).SignedString(secret)
 	if err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Gagal membuat Refresh Token")
@@ -123,9 +129,9 @@ func Login(c *gin.Context) {
 
 	sendResponse(c, http.StatusOK, gin.H{
 		"access_token":             accessToken,
-		"access_token_expired_at":  expAccess,
+		"access_token_expired_at":  accessExp.Format(time.RFC3339),
 		"refresh_token":            refreshToken,
-		"refresh_token_expired_at": expRefresh,
+		"refresh_token_expired_at": refreshExp.Format(time.RFC3339),
 	}, "Login berhasil")
 }
 

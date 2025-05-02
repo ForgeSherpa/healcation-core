@@ -52,6 +52,7 @@ Jika database belum ada, jalankan migrasi dan seeder secara otomatis:
 
 ```sh
 go run main.go
+compiledaemon --command="./healcationBackend"
 ```
 Seeder akan menambahkan data awal (admin user & history perjalanan).
 

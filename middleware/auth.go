@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	// "strconv"
 	"strings"
@@ -29,73 +30,48 @@ func Validate() gin.HandlerFunc {
 			return
 		}
 
-		tokenParts := strings.Split(authHeader, " ")
-		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
 			sendResponse(c, http.StatusUnauthorized, nil, "Invalid token format")
 			c.Abort()
 			return
 		}
+		tokenString := parts[1]
 
-		tokenString := tokenParts[1]
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return []byte(os.Getenv("SECRET")), nil
 		})
-
-		if err != nil {
-			sendResponse(c, http.StatusUnauthorized, nil, "Invalid token")
+		if err != nil || !token.Valid {
+			sendResponse(c, http.StatusUnauthorized, nil, "Invalid or expired token")
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
+		if !ok {
 			sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized")
 			c.Abort()
 			return
 		}
 
-		userID, exists := claims["sub"]
-		if !exists {
-			sendResponse(c, http.StatusUnauthorized, nil, "User ID not found in token")
+		sub, ok := claims["sub"].(string)
+		if !ok || sub == "" {
+			sendResponse(c, http.StatusUnauthorized, nil, "Invalid or missing sub claim")
 			c.Abort()
 			return
 		}
 
-		// Menyimpan userID dalam context dengan tipe uint
-		// var userIDUint uint
-		// switch v := userID.(type) {
-		// case float64: // Jika userID berupa float64 (misalnya dari JSON parsing)
-		// 	userIDUint = uint(v)
-		// case string: // Jika userID berupa string, konversi ke uint
-		// 	idInt, err := strconv.ParseUint(v, 10, 64)
-		// 	if err != nil {
-		// 		sendResponse(c, http.StatusUnauthorized, nil, "Invalid user ID format")
-		// 		c.Abort()
-		// 		return
-		// 	}
-		// 	userIDUint = uint(idInt)
-		// default:
-		// 	sendResponse(c, http.StatusUnauthorized, nil, "Invalid user ID type")
-		// 	c.Abort()
-		// 	return
-		// }
-
-		// c.Set("userID", userIDUint)
-		// c.Next()
-
-		// Menyimpan userID dalam context dengan tipe string
-		switch v := userID.(type) {
-		case string:
-			c.Set("userID", v)
-		case float64:
-			c.Set("userID", fmt.Sprintf("%.0f", v))
-		default:
-			sendResponse(c, http.StatusUnauthorized, nil, "Invalid user ID format")
+		id64, err := strconv.ParseUint(sub, 10, 64)
+		if err != nil {
+			sendResponse(c, http.StatusUnauthorized, nil, "Invalid sub format")
 			c.Abort()
 			return
 		}
+		c.Set("userID", uint(id64))
+
+		c.Next()
 	}
 }
