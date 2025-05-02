@@ -43,19 +43,19 @@ func GetPopularDestinations(c *gin.Context) {
 			"id":      "1",
 			"town":    "Bali",
 			"country": "Indonesia",
-			"image":   "https://imgur.com/FqVjytG",
+			"image":   "https://lp-cms-production.imgix.net/2023-01/GettyImages-827446284.jpg?w=1095&fit=crop&crop=faces%2Cedges&auto=format&q=75",
 		},
 		{
 			"id":      "2",
 			"town":    "Yogyakarta",
 			"country": "Indonesia",
-			"image":   "https://imgur.com/BxsyrtK",
+			"image":   "https://api2.kemenparekraf.go.id/storage/app/resources/image_artikel/Sumbu%20Kosmologis%20Yogyakarta_Shutterstock%201021926103_Creativa%20Images.jpg",
 		},
 		{
 			"id":      "3",
 			"town":    "Lombok",
 			"country": "Indonesia",
-			"image":   "https://imgur.com/uM0wYL1",
+			"image":   "https://img.jakpost.net/c/2016/12/15/2016_12_15_17857_1481791864._large.jpg",
 		},
 	}
 
