@@ -70,9 +70,9 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	var data struct {
-		Name        string `json:"name,omitempty"`
-		Email       string `json:"email,omitempty"`
-		NewPassword string `json:"new password,omitempty"`
+		Name     string `json:"name,omitempty"`
+		Email    string `json:"email,omitempty"`
+		Password string `json:"password,omitempty"`
 	}
 
 	if err := c.BindJSON(&data); err != nil {
@@ -82,23 +82,28 @@ func UpdateProfile(c *gin.Context) {
 
 	data.Email = strings.ToLower(data.Email)
 
-	if data.Name == "" || data.Email == "" {
-		sendResponse(c, http.StatusBadRequest, nil, "Name and Email cannot be empty")
-		return
+	updates := map[string]interface{}{}
+
+	if data.Name != "" {
+		updates["username"] = data.Name
 	}
 
-	updates := map[string]interface{}{
-		"username": data.Name,
-		"email":    data.Email,
+	if data.Email != "" {
+		updates["email"] = strings.ToLower(data.Email)
 	}
 
-	if data.NewPassword != "" {
-		hashed, err := bcrypt.GenerateFromPassword([]byte(data.NewPassword), bcrypt.DefaultCost)
+	if data.Password != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
 		if err != nil {
 			sendResponse(c, http.StatusInternalServerError, nil, "Failed to encrypt new password")
 			return
 		}
 		updates["password"] = string(hashed)
+	}
+
+	if len(updates) == 0 {
+		sendResponse(c, http.StatusBadRequest, nil, "No fields to update")
+		return
 	}
 
 	if err := database.DB.Model(&models.User{}).
