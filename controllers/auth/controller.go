@@ -3,6 +3,7 @@ package auth
 import (
 	"healcationBackend/database"
 	"healcationBackend/models"
+	"healcationBackend/pkg/config"
 	"net/http"
 	"os"
 	"strconv"
@@ -96,14 +97,16 @@ func Login(c *gin.Context) {
 		sendResponse(c, http.StatusUnauthorized, nil, "Email atau password salah")
 		return
 	}
-	env := os.Getenv("APP_ENV") // "staging" or "production"
 	var accessExp, refreshExp time.Time
-	if env == "staging" {
+	if config.IsStaging {
 		accessExp = time.Now().Add(2 * time.Hour)
 		refreshExp = time.Now().Add(2 * time.Hour)
-	} else {
+	} else if config.IsProduction {
 		accessExp = time.Now().Add(7 * 24 * time.Hour)
 		refreshExp = time.Now().Add(30 * 24 * time.Hour)
+	} else {
+		sendResponse(c, http.StatusInternalServerError, nil, "Environment tidak di-set dengan benar")
+		return
 	}
 
 	userIDStr := strconv.FormatUint(uint64(user.ID), 10)

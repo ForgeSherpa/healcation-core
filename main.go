@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-	database.LoadEnvVariables()
 	database.Connect()
 
 	r := gin.Default()

@@ -3,9 +3,9 @@ package database
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"healcationBackend/models"
+	"healcationBackend/pkg/config"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -16,8 +16,9 @@ import (
 var DB *gorm.DB
 
 func Connect() {
-	primaryURL := os.Getenv("TURSO_DATABASE_URL")
-	authToken := os.Getenv("TURSO_AUTH_TOKEN")
+	primaryURL := config.TursoDatabaseURL
+	authToken := config.TursoAuthToken
+
 	if primaryURL == "" || authToken == "" {
 		log.Fatal("TURSO_DATABASE_URL dan TURSO_AUTH_TOKEN harus di-set")
 	}
@@ -39,7 +40,4 @@ func Connect() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("Database migrations completed")
-
-	// Seed()
-	// log.Println("Seed data inserted successfully")
 }

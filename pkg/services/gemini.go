@@ -5,103 +5,37 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"healcationBackend/pkg/config"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
 )
 
-func GetGoogleImages(query string) ([]string, error) {
-	apiKey := os.Getenv("GOOGLE_API_KEY")
-	cx := os.Getenv("GOOGLE_API_CX")
+var ErrGeminiUnavailable = errors.New("gemini service unavailable")
 
-	if apiKey == "" || cx == "" {
-		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
-	}
-
-	apiURL := fmt.Sprintf("https://www.googleapis.com/customsearch/v1?q=%s&key=%s&cx=%s&searchType=image&num=1",
-		url.QueryEscape(query), apiKey, cx)
-
-	resp, err := http.Get(apiURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var googleResp struct {
-		Items []struct {
-			Link string `json:"link"`
-		} `json:"items"`
-	}
-
-	if err := json.Unmarshal(body, &googleResp); err != nil {
-		return nil, err
-	}
-
-	if len(googleResp.Items) == 0 {
-		return nil, fmt.Errorf("tidak ada gambar ditemukan untuk query: %s", query)
-	}
-
-	return []string{googleResp.Items[0].Link}, nil
+type GeminiService struct {
+	apiKey string
 }
 
-func GetGoogleImagesPlaces(query string) ([]string, error) {
-	apiKey := os.Getenv("GOOGLE_API_KEY")
-	cx := os.Getenv("GOOGLE_API_CX")
-
-	if apiKey == "" || cx == "" {
-		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
+func NewGeminiService() (*GeminiService, error) {
+	if !config.IsGeminiEnabled {
+		return nil, ErrGeminiUnavailable
 	}
+	return &GeminiService{
+		apiKey: config.GeminiAPIKey,
+	}, nil
+}
 
-	apiURL := fmt.Sprintf("https://www.googleapis.com/customsearch/v1?q=%s&key=%s&cx=%s&searchType=image&num=2",
-		url.QueryEscape(query), apiKey, cx)
-
-	resp, err := http.Get(apiURL)
-	if err != nil {
-		return nil, err
+func HandleGeminiUnavailable(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrGeminiUnavailable) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": ErrGeminiUnavailable.Error(),
+		})
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gagal mendapatkan gambar dari Google: status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var googleResp struct {
-		Items []struct {
-			Link string `json:"link"`
-		} `json:"items"`
-	}
-
-	if err := json.Unmarshal(body, &googleResp); err != nil {
-		return nil, err
-	}
-
-	var imageURLs []string
-	for i := 0; i < len(googleResp.Items) && i < 2; i++ {
-		imageURLs = append(imageURLs, googleResp.Items[i].Link)
-	}
-
-	if len(imageURLs) == 0 {
-		return nil, fmt.Errorf("tidak ada gambar ditemukan untuk query: %s", query)
-	}
-
-	return imageURLs, nil
 }
 
 func removeMarkdownCodeBlock(input string) string {
@@ -138,13 +72,13 @@ type GeminiResponseSearch struct {
 	} `json:"candidates"`
 }
 
-func SearchGemini(query string) ([]PlaceSearch, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func (s *GeminiService) SearchGemini(query string) ([]PlaceSearch, error) {
+	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := os.Getenv("GEMINI_API_KEY")
+	apiURL := config.GeminiAPIKey
 
 	prompt := fmt.Sprintf(`Cari informasi tentang destinasi "%s" dan berikan respons dalam format JSON seperti berikut:
 	{
@@ -231,13 +165,13 @@ type GeminiResponseSearchGetPlaces struct {
 	} `json:"candidates"`
 }
 
-func GetPlacesFromGemini(preferences []string, country, town string) (map[string]interface{}, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func (s *GeminiService) GetPlacesFromGemini(preferences []string, country, town string) (map[string]interface{}, error) {
+	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := os.Getenv("GEMINI_API_KEY")
+	apiURL := config.GeminiAPIKey
 
 	prompt := fmt.Sprintf(`Berikan daftar tempat wisata dan akomodasi di %s, %s berdasarkan preferensi berikut: %v.
 Harap berikan respons dalam format JSON dengan struktur berikut:
@@ -344,7 +278,7 @@ type PlaceDetail struct {
 	Description string `json:"description"`
 }
 
-func GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
+func (s *GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return PlaceDetail{}, fmt.Errorf("API Key tidak ditemukan")
@@ -437,7 +371,7 @@ type Place struct {
 	Type     string `json:"type"`
 }
 
-func GetTimelineFromGemini(accommodation, town, country, startDate, endDate string, places []struct {
+func (s *GeminiService) GetTimelineFromGemini(accommodation, town, country, startDate, endDate string, places []struct {
 	Name      string `json:"name"`
 	TimeOfDay string `json:"timeOfDay"`
 }) (map[string]interface{}, error) {

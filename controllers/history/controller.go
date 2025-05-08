@@ -1,11 +1,13 @@
 package history
 
 import (
+	"encoding/json"
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +37,17 @@ type HistoryResponse struct {
 }
 
 func GetHistories(c *gin.Context) {
+	uidValue, exists := c.Get("userID")
+	if !exists {
+		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
+		return
+	}
+	userID, ok := uidValue.(uint)
+	if !ok {
+		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
+		return
+	}
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if page < 1 {
@@ -43,15 +56,34 @@ func GetHistories(c *gin.Context) {
 
 	offset := (page - 1) * limit
 
-	var histories []models.History
-	var totalRecords int64
+	search := strings.TrimSpace(c.Query("search"))
 
-	if err := database.DB.Model(&models.History{}).Count(&totalRecords).Error; err != nil {
+	var pattern string
+	if search != "" {
+		pattern = "%" + strings.ToLower(search) + "%"
+	}
+
+	var totalRecords int64
+	countQ := database.DB.Model(&models.History{}).
+		Where("user_id = ?", userID)
+	if search != "" {
+		countQ = countQ.Where("LOWER(town) LIKE ?", pattern)
+	}
+	if err := countQ.Count(&totalRecords).Error; err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to count histories: "+err.Error())
 		return
 	}
 
-	if err := database.DB.Limit(limit).Offset(offset).Find(&histories).Error; err != nil {
+	var histories []models.History
+	dataQ := database.DB.
+		Where("user_id = ?", userID)
+	if search != "" {
+		dataQ = dataQ.Where("LOWER(town) LIKE ?", pattern)
+	}
+	if err := dataQ.
+		Limit(limit).
+		Offset(offset).
+		Find(&histories).Error; err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to retrieve histories: "+err.Error())
 		return
 	}
@@ -71,13 +103,21 @@ func GetHistories(c *gin.Context) {
 
 	responseHistories := make([]HistoryResponse, 0)
 	for _, h := range histories {
+		firstImage := ""
+		var imgs []string
+		if err := json.Unmarshal([]byte(h.Image), &imgs); err == nil {
+			if len(imgs) > 0 {
+				firstImage = imgs[0]
+			}
+		}
+
 		responseHistories = append(responseHistories, HistoryResponse{
 			ID:        h.ID,
 			Country:   h.Country,
 			Town:      h.Town,
 			StartDate: h.StartDate.Format(time.RFC3339),
 			EndDate:   h.EndDate.Format(time.RFC3339),
-			Image:     h.Image,
+			Image:     firstImage,
 		})
 	}
 
@@ -91,14 +131,26 @@ func GetHistories(c *gin.Context) {
 }
 
 func GetHistoryDetail(c *gin.Context) {
-	id := c.Param("id")
-	var history models.History
-
-	if err := database.DB.First(&history, "id = ?", id).Error; err != nil {
-		sendResponse(c, http.StatusNotFound, nil, "History not found")
+	uidValue, exists := c.Get("userID")
+	if !exists {
+		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
+		return
+	}
+	userID, ok := uidValue.(uint)
+	if !ok {
+		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
 		return
 	}
 
+	id := c.Param("id")
+	var history models.History
+
+	if err := database.DB.
+		Where("id = ? AND user_id = ?", id, userID).
+		First(&history).Error; err != nil {
+		sendResponse(c, http.StatusNotFound, nil, "History not found or access denied")
+		return
+	}
 	response := HistoryResponse{
 		ID:        history.ID,
 		Country:   history.Country,
@@ -113,11 +165,24 @@ func GetHistoryDetail(c *gin.Context) {
 }
 
 func DeleteHistory(c *gin.Context) {
+	uidValue, exists := c.Get("userID")
+	if !exists {
+		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
+		return
+	}
+	userID, ok := uidValue.(uint)
+	if !ok {
+		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
+		return
+	}
+
 	id := c.Param("id")
 	var history models.History
 
-	if err := database.DB.First(&history, "id = ?", id).Error; err != nil {
-		sendResponse(c, http.StatusNotFound, nil, "History not found")
+	if err := database.DB.
+		Where("id = ? AND user_id = ?", id, userID).
+		First(&history).Error; err != nil {
+		sendResponse(c, http.StatusNotFound, nil, "History not found or access denied")
 		return
 	}
 
@@ -125,6 +190,5 @@ func DeleteHistory(c *gin.Context) {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to delete history: "+err.Error())
 		return
 	}
-
 	sendResponse(c, http.StatusOK, nil, "History deleted successfully")
 }

@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
-	"healcationBackend/services"
+	"healcationBackend/pkg/config"
+	"healcationBackend/pkg/services"
 	"net/http"
 	"net/url"
 	"time"
@@ -39,13 +40,31 @@ func GetPlaces(c *gin.Context) {
 		return
 	}
 
-	placesData, err := services.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
-	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API: "+err.Error())
-		return
+	if config.IsProduction {
+		gem, err := services.NewGeminiService()
+		if err != nil {
+			services.HandleGeminiUnavailable(c.Writer, err)
+			return
+		}
+		placesData, err := gem.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
 	}
 
-	sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
+	if config.IsStaging {
+		placesData, err := services.GetPlacesMock(request.Preferences, request.Country, request.Town)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API Mock: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places Mock retrieved successfully")
+	}
+
 }
 
 func GetPlaceDetail(c *gin.Context) {
@@ -65,13 +84,30 @@ func GetPlaceDetail(c *gin.Context) {
 		return
 	}
 
-	placeDetail, err := services.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
-	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details: "+err.Error())
-		return
+	if config.IsProduction {
+		gem, err := services.NewGeminiService()
+		if err != nil {
+			services.HandleGeminiUnavailable(c.Writer, err)
+			return
+		}
+		placeDetail, err := gem.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
 	}
 
-	sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
+	if config.IsStaging {
+		placeDetail, err := services.GetPlaceDetailMock(placeName, request.Type, request.Country, request.City)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place Mock details: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail Mock retrieved successfully")
+	}
 }
 
 type TimelineRequest struct {
@@ -93,20 +129,44 @@ func Timeline(c *gin.Context) {
 		return
 	}
 
-	response, err := services.GetTimelineFromGemini(
-		request.Accomodation,
-		request.Town,
-		request.Country,
-		request.StartDate,
-		request.EndDate,
-		request.Places,
-	)
-	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini: "+err.Error())
-		return
+	if config.IsProduction {
+		gem, err := services.NewGeminiService()
+		if err != nil {
+			services.HandleGeminiUnavailable(c.Writer, err)
+			return
+		}
+		response, err := gem.GetTimelineFromGemini(
+			request.Accomodation,
+			request.Town,
+			request.Country,
+			request.StartDate,
+			request.EndDate,
+			request.Places,
+		)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
 	}
 
-	sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
+	if config.IsStaging {
+		response, err := services.GetTimelineMock(
+			request.Accomodation,
+			request.Town,
+			request.Country,
+			request.StartDate,
+			request.EndDate,
+			request.Places,
+		)
+		if err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini Mock: "+err.Error())
+			return
+		}
+
+		sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline Mock retrieved successfully")
+	}
 }
 
 type SelectPlaceRequest struct {
@@ -157,6 +217,18 @@ func parseDate(dateStr string) time.Time {
 }
 
 func SelectPlace(c *gin.Context) {
+
+	userIDValue, exists := c.Get("userID")
+	if !exists {
+		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
+		return
+	}
+	userID, ok := userIDValue.(uint)
+	if !ok {
+		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
+		return
+	}
+
 	var request SelectPlaceRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -178,6 +250,7 @@ func SelectPlace(c *gin.Context) {
 	}
 
 	history := models.History{
+		UserID:    userID,
 		Country:   request.Country,
 		Town:      request.Town,
 		StartDate: parseDate(request.StartDate),
