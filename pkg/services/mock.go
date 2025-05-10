@@ -1,17 +1,23 @@
 package services
 
-func SearchGeminiMock(query string) ([]map[string]string, error) {
-	results := []map[string]string{
-		{"country": "Indonesia", "town": "Denpasar"},
-		{"country": "Indonesia", "town": "Ubud"},
-		{"country": "Indonesia", "town": "Seminyak"},
-		{"country": "Indonesia", "town": "Kuta"},
-		{"country": "Indonesia", "town": "Nusa Dua"},
+type GeminiMockService struct{}
+
+func NewGeminiMockService() AIService {
+	return GeminiMockService{}
+}
+
+func (m GeminiMockService) Search(query string) ([]PlaceSearch, error) {
+	results := []PlaceSearch{
+		{Country: "Indonesia", Town: "Denpasar"},
+		{Country: "Indonesia", Town: "Ubud"},
+		{Country: "Indonesia", Town: "Seminyak"},
+		{Country: "Indonesia", Town: "Kuta"},
+		{Country: "Indonesia", Town: "Nusa Dua"},
 	}
 	return results, nil
 }
 
-func GetPlacesMock(preferences []string, country, town string) (map[string]interface{}, error) {
+func (m GeminiMockService) GetPlaces(preferences []string, country, town string) (map[string]interface{}, error) {
 	accommodations := []map[string]interface{}{
 		{
 			"image": []string{
@@ -57,16 +63,15 @@ func GetPlacesMock(preferences []string, country, town string) (map[string]inter
 	return result, nil
 }
 
-func GetPlaceDetailMock(name, placeType, country, city string) (map[string]string, error) {
-	detail := map[string]string{
-		"name":        name,
-		"image":       "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1d/f8/1c/13/padma-resort-ubud.jpg?w=1200&h=-1&s=1",
-		"description": "Hotel sederhana yang terletak di Tanjung Pinang. Informasi lebih detail mengenai fasilitas, harga, dan ketersediaan kamar sebaiknya dicari melalui platform pemesanan hotel atau menghubungi langsung hotel tersebut.",
-	}
-	return detail, nil
+func (m GeminiMockService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
+	return PlaceDetail{
+		Name:        name,
+		Image:       "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1d/f8/1c/13/padma-resort-ubud.jpg?w=1200&h=-1&s=1",
+		Description: "Hotel sederhana yang terletak di Tanjung Pinang. Informasi lebih detail mengenai fasilitas, harga, dan ketersediaan kamar sebaiknya dicari melalui platform pemesanan hotel atau menghubungi langsung hotel tersebut.",
+	}, nil
 }
 
-func GetTimelineMock(accommodation, town, country, startDate, endDate string, places []struct {
+func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
 	Name      string `json:"name"`
 	TimeOfDay string `json:"timeOfDay"`
 }) (map[string]interface{}, error) {

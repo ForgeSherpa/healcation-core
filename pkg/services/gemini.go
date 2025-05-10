@@ -8,35 +8,29 @@ import (
 	"healcationBackend/pkg/config"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 )
-
-var ErrGeminiUnavailable = errors.New("gemini service unavailable")
 
 type GeminiService struct {
 	apiKey string
 }
 
-func NewGeminiService() (*GeminiService, error) {
-	if !config.IsGeminiEnabled {
-		return nil, ErrGeminiUnavailable
-	}
-	return &GeminiService{
+func NewGeminiService() AIService {
+	return GeminiService{
 		apiKey: config.GeminiAPIKey,
-	}, nil
+	}
 }
 
-func HandleGeminiUnavailable(w http.ResponseWriter, err error) {
-	if errors.Is(err, ErrGeminiUnavailable) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": ErrGeminiUnavailable.Error(),
-		})
-	}
-}
+// func HandleGeminiUnavailable(w http.ResponseWriter, err error) {
+// 	if errors.Is(err, ErrGeminiUnavailable) {
+// 		w.Header().Set("Content-Type", "application/json")
+// 		w.WriteHeader(http.StatusServiceUnavailable)
+// 		json.NewEncoder(w).Encode(map[string]string{
+// 			"error": ErrGeminiUnavailable.Error(),
+// 		})
+// 	}
+// }
 
 func removeMarkdownCodeBlock(input string) string {
 	re := regexp.MustCompile("(?s)```json\\n(.*?)\\n```")
@@ -57,11 +51,6 @@ func cleanJSONResponse(response string) string {
 }
 
 // Fitur Search
-type PlaceSearch struct {
-	Country string `json:"country"`
-	Town    string `json:"town"`
-}
-
 type GeminiResponseSearch struct {
 	Candidates []struct {
 		Content struct {
@@ -72,7 +61,7 @@ type GeminiResponseSearch struct {
 	} `json:"candidates"`
 }
 
-func (s *GeminiService) SearchGemini(query string) ([]PlaceSearch, error) {
+func (s GeminiService) Search(query string) ([]PlaceSearch, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
@@ -165,7 +154,7 @@ type GeminiResponseSearchGetPlaces struct {
 	} `json:"candidates"`
 }
 
-func (s *GeminiService) GetPlacesFromGemini(preferences []string, country, town string) (map[string]interface{}, error) {
+func (s GeminiService) GetPlaces(preferences []string, country, town string) (map[string]interface{}, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
@@ -271,20 +260,13 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 	return response, nil
 }
 
-// fitur GetPlaceDetail
-type PlaceDetail struct {
-	Name        string `json:"name"`
-	Image       string `json:"image"`
-	Description string `json:"description"`
-}
-
-func (s *GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+func (s GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
+	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return PlaceDetail{}, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := os.Getenv("GEMINI_API_KEY")
+	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
 
 	typeInfo := ""
 	if placeType == "accommodation" {
@@ -371,16 +353,16 @@ type Place struct {
 	Type     string `json:"type"`
 }
 
-func (s *GeminiService) GetTimelineFromGemini(accommodation, town, country, startDate, endDate string, places []struct {
+func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
 	Name      string `json:"name"`
 	TimeOfDay string `json:"timeOfDay"`
 }) (map[string]interface{}, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, errors.New("API Key tidak ditemukan")
 	}
 
-	apiURL := os.Getenv("GEMINI_API_KEY")
+	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
 
 	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s, %s pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
 Harap berikan respons dalam format JSON dengan struktur berikut:
