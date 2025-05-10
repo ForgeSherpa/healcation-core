@@ -22,16 +22,6 @@ func NewGeminiService() AIService {
 	}
 }
 
-// func HandleGeminiUnavailable(w http.ResponseWriter, err error) {
-// 	if errors.Is(err, ErrGeminiUnavailable) {
-// 		w.Header().Set("Content-Type", "application/json")
-// 		w.WriteHeader(http.StatusServiceUnavailable)
-// 		json.NewEncoder(w).Encode(map[string]string{
-// 			"error": ErrGeminiUnavailable.Error(),
-// 		})
-// 	}
-// }
-
 func removeMarkdownCodeBlock(input string) string {
 	re := regexp.MustCompile("(?s)```json\\n(.*?)\\n```")
 	matches := re.FindStringSubmatch(input)

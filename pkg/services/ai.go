@@ -1,6 +1,11 @@
 package services
 
-import "healcationBackend/pkg/config"
+import (
+	"encoding/json"
+	"errors"
+	"healcationBackend/pkg/config"
+	"net/http"
+)
 
 type PlaceSearch struct {
 	Country string `json:"country"`
@@ -23,10 +28,26 @@ type AIService interface {
 	}) (map[string]interface{}, error)
 }
 
-func NewAIService() AIService {
-	if config.IsGeminiEnabled {
-		return NewGeminiService()
+var ErrGeminiUnavailable = errors.New("gemini service is unavailable")
+
+func HandleGeminiUnavailable(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrGeminiUnavailable) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": ErrGeminiUnavailable.Error(),
+		})
+	}
+}
+
+func NewAIService() (AIService, error) {
+	if config.IsStaging {
+		return NewGeminiMockService(), nil
 	}
 
-	return NewGeminiMockService()
+	if config.IsGeminiEnabled {
+		return NewGeminiService(), nil
+	}
+
+	return nil, ErrGeminiUnavailable
 }
