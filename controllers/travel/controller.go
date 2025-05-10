@@ -2,10 +2,10 @@ package travel
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
-	"healcationBackend/pkg/config"
 	"healcationBackend/pkg/services"
 	"net/http"
 	"net/url"
@@ -40,31 +40,23 @@ func GetPlaces(c *gin.Context) {
 		return
 	}
 
-	if config.IsProduction {
-		gem, err := services.NewGeminiService()
-		if err != nil {
+	aiSvc, err := services.NewAIService()
+	if err != nil {
+		if errors.Is(err, services.ErrGeminiUnavailable) {
 			services.HandleGeminiUnavailable(c.Writer, err)
-			return
+		} else {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to initialize AI service: "+err.Error())
 		}
-		placesData, err := gem.GetPlacesFromGemini(request.Preferences, request.Country, request.Town)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
+		return
 	}
 
-	if config.IsStaging {
-		placesData, err := services.GetPlacesMock(request.Preferences, request.Country, request.Town)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari Gemini API Mock: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places Mock retrieved successfully")
+	placesData, err := aiSvc.GetPlaces(request.Preferences, request.Country, request.Town)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mengambil data dari AI Service: "+err.Error())
+		return
 	}
 
+	sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
 }
 
 func GetPlaceDetail(c *gin.Context) {
@@ -84,30 +76,23 @@ func GetPlaceDetail(c *gin.Context) {
 		return
 	}
 
-	if config.IsProduction {
-		gem, err := services.NewGeminiService()
-		if err != nil {
+	aiSvc, err := services.NewAIService()
+	if err != nil {
+		if errors.Is(err, services.ErrGeminiUnavailable) {
 			services.HandleGeminiUnavailable(c.Writer, err)
-			return
+		} else {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to initialize AI service: "+err.Error())
 		}
-		placeDetail, err := gem.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
+		return
 	}
 
-	if config.IsStaging {
-		placeDetail, err := services.GetPlaceDetailMock(placeName, request.Type, request.Country, request.City)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place Mock details: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail Mock retrieved successfully")
+	placeDetail, err := aiSvc.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details from AI Service: "+err.Error())
+		return
 	}
+
+	sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
 }
 
 type TimelineRequest struct {
@@ -129,44 +114,30 @@ func Timeline(c *gin.Context) {
 		return
 	}
 
-	if config.IsProduction {
-		gem, err := services.NewGeminiService()
-		if err != nil {
+	aiSvc, err := services.NewAIService()
+	if err != nil {
+		if errors.Is(err, services.ErrGeminiUnavailable) {
 			services.HandleGeminiUnavailable(c.Writer, err)
-			return
+		} else {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to initialize AI service: "+err.Error())
 		}
-		response, err := gem.GetTimelineFromGemini(
-			request.Accomodation,
-			request.Town,
-			request.Country,
-			request.StartDate,
-			request.EndDate,
-			request.Places,
-		)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
+		return
 	}
 
-	if config.IsStaging {
-		response, err := services.GetTimelineMock(
-			request.Accomodation,
-			request.Town,
-			request.Country,
-			request.StartDate,
-			request.EndDate,
-			request.Places,
-		)
-		if err != nil {
-			sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari Gemini Mock: "+err.Error())
-			return
-		}
-
-		sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline Mock retrieved successfully")
+	response, err := aiSvc.GetTimeline(
+		request.Accomodation,
+		request.Town,
+		request.Country,
+		request.StartDate,
+		request.EndDate,
+		request.Places,
+	)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari AI Service: "+err.Error())
+		return
 	}
+
+	sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
 }
 
 type SelectPlaceRequest struct {

@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"errors"
 	"healcationBackend/pkg/services"
 	"net/http"
 
@@ -28,21 +29,23 @@ func SearchPlanner(c *gin.Context) {
 		return
 	}
 
-	gem, err := services.NewGeminiService()
+	aiSvc, err := services.NewAIService()
 	if err != nil {
-		services.HandleGeminiUnavailable(c.Writer, err)
+		if errors.Is(err, services.ErrGeminiUnavailable) {
+			services.HandleGeminiUnavailable(c.Writer, err)
+		} else {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to initialize AI service: "+err.Error())
+		}
 		return
 	}
 
-	results, err := gem.SearchGemini(query)
-
+	results, err := aiSvc.Search(query)
 	if err != nil {
-		sendResponse(c, http.StatusBadGateway, nil, "Failed to fetch data from Gemini AI: "+err.Error())
+		sendResponse(c, http.StatusBadGateway, nil, "Failed to fetch data from AI Service: "+err.Error())
 		return
 	}
 
 	sendResponse(c, http.StatusOK, gin.H{"results": results}, "Search results retrieved successfully")
-
 }
 
 func GetPopularDestinations(c *gin.Context) {
