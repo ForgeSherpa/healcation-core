@@ -2,6 +2,7 @@ package history
 
 import (
 	"encoding/json"
+	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"math"
@@ -130,6 +131,20 @@ func GetHistories(c *gin.Context) {
 	}, "Histories retrieved successfully")
 }
 
+type AccomodationDetail struct {
+	Name     string `json:"name"`
+	RoadName string `json:"roadName"`
+}
+
+type TimelineDetail struct {
+	Image    []string `json:"image"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Time     string   `json:"time"`
+	Town     string   `json:"town"`
+	Type     string   `json:"type"`
+}
+
 func GetHistoryDetail(c *gin.Context) {
 	uidValue, exists := c.Get("userID")
 	if !exists {
@@ -141,27 +156,69 @@ func GetHistoryDetail(c *gin.Context) {
 		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
 		return
 	}
-
-	id := c.Param("id")
-	var history models.History
-
+	var h models.History
+	idParam := c.Param("id")
 	if err := database.DB.
-		Where("id = ? AND user_id = ?", id, userID).
-		First(&history).Error; err != nil {
-		sendResponse(c, http.StatusNotFound, nil, "History not found or access denied")
+		Where("id = ? AND user_id = ?", idParam, userID).
+		First(&h).Error; err != nil {
+		sendResponse(c, http.StatusNotFound, nil, "Not found")
 		return
 	}
-	response := HistoryResponse{
-		ID:        history.ID,
-		Country:   history.Country,
-		Town:      history.Town,
-		StartDate: history.StartDate.Format(time.RFC3339),
-		EndDate:   history.EndDate.Format(time.RFC3339),
-		Image:     history.Image,
+
+	var accoms []AccomodationDetail
+	json.Unmarshal([]byte(h.Accommodations), &accoms)
+
+	var timelines map[string][]TimelineDetail
+	json.Unmarshal([]byte(h.Timelines), &timelines)
+
+	type PlaceData struct {
+		Type     string   `json:"type"`
+		Landmark string   `json:"landmark"`
+		RoadName string   `json:"roadName"`
+		Town     string   `json:"town"`
+		Time     string   `json:"time"`
+		Image    []string `json:"image"`
+	}
+	type DateGroup struct {
+		Date string      `json:"date"`
+		Data []PlaceData `json:"data"`
 	}
 
-	sendResponse(c, http.StatusOK, response, "History retrieved successfully")
+	var placeVisited []DateGroup
+	for date, items := range timelines {
+		var list []PlaceData
+		for _, it := range items {
+			list = append(list, PlaceData{
+				Type:     it.Type,
+				Landmark: it.Landmark,
+				RoadName: it.RoadName,
+				Town:     it.Town,
+				Time:     it.Time,
+				Image:    it.Image,
+			})
+		}
+		placeVisited = append(placeVisited, DateGroup{Date: date, Data: list})
+	}
 
+	resp := struct {
+		ID           string      `json:"id"`
+		Budget       string      `json:"budget"`
+		Town         string      `json:"town"`
+		Country      string      `json:"country"`
+		StartDate    string      `json:"startDate"`
+		EndDate      string      `json:"endDate"`
+		PlaceVisited []DateGroup `json:"placeVisited"`
+	}{
+		ID:           strconv.FormatUint(uint64(h.ID), 10),
+		Budget:       fmt.Sprintf("%d - %d", h.BudgetMin, h.BudgetMax),
+		Town:         h.Town,
+		Country:      h.Country,
+		StartDate:    h.StartDate.Format(time.RFC3339Nano),
+		EndDate:      h.EndDate.Format(time.RFC3339Nano),
+		PlaceVisited: placeVisited,
+	}
+
+	sendResponse(c, http.StatusOK, resp, "History detail retrieved")
 }
 
 func DeleteHistory(c *gin.Context) {

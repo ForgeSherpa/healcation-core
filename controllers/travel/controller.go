@@ -148,15 +148,17 @@ type SelectPlaceRequest struct {
 	Accomodation string                      `json:"accomodation"`
 	Title        string                      `json:"title"`
 	Timelines    map[string][]TimelineDetail `json:"timelines"`
+	MinBudget    int                         `json:"minBudget"`
+	MaxBudget    int                         `json:"maxBudget"`
 }
 
 type TimelineDetail struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image    []string `json:"image"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Time     string   `json:"time"`
+	Town     string   `json:"town"`
+	Type     string   `json:"type"`
 }
 
 type SelectPlaceResponse struct {
@@ -170,6 +172,7 @@ type PlaceData struct {
 	Title                string                      `json:"title"`
 	StartDate            string                      `json:"startDate"`
 	EndDate              string                      `json:"endDate"`
+	Budget               string                      `json:"budget"`
 	SelectedAccomodation []AccomodationDetail        `json:"selectedAccomodation"`
 	Timeline             map[string][]TimelineDetail `json:"timeline"`
 }
@@ -188,7 +191,6 @@ func parseDate(dateStr string) time.Time {
 }
 
 func SelectPlace(c *gin.Context) {
-
 	userIDValue, exists := c.Get("userID")
 	if !exists {
 		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
@@ -201,7 +203,6 @@ func SelectPlace(c *gin.Context) {
 	}
 
 	var request SelectPlaceRequest
-
 	if err := c.ShouldBindJSON(&request); err != nil {
 		sendResponse(c, http.StatusBadRequest, nil, "Invalid request format: "+err.Error())
 		return
@@ -210,7 +211,7 @@ func SelectPlace(c *gin.Context) {
 	var allImages []string
 	for _, dayDetails := range request.Timelines {
 		for _, detail := range dayDetails {
-			allImages = append(allImages, detail.Image)
+			allImages = append(allImages, detail.Image...)
 			fmt.Println("All Images:", allImages)
 		}
 	}
@@ -219,14 +220,31 @@ func SelectPlace(c *gin.Context) {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to process images")
 		return
 	}
+	accList := []AccomodationDetail{{Name: request.Accomodation, RoadName: ""}}
+	accJSON, err := json.Marshal(accList)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal accommodations")
+		return
+	}
+
+	tlJSON, err := json.Marshal(request.Timelines)
+	if err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal timelines")
+		return
+	}
 
 	history := models.History{
-		UserID:    userID,
-		Country:   request.Country,
-		Town:      request.Town,
-		StartDate: parseDate(request.StartDate),
-		EndDate:   parseDate(request.EndDate),
-		Image:     string(imageJSON),
+		UserID:         userID,
+		Country:        request.Country,
+		Town:           request.Town,
+		Title:          request.Title,
+		StartDate:      parseDate(request.StartDate),
+		EndDate:        parseDate(request.EndDate),
+		BudgetMin:      request.MinBudget,
+		BudgetMax:      request.MaxBudget,
+		Accommodations: string(accJSON),
+		Timelines:      string(tlJSON),
+		Image:          string(imageJSON),
 	}
 
 	if err := database.DB.Create(&history).Error; err != nil {
@@ -237,18 +255,14 @@ func SelectPlace(c *gin.Context) {
 	response := SelectPlaceResponse{
 		Message: "Done! Enjoy your vacation!",
 		Data: PlaceData{
-			Country:   request.Country,
-			Town:      request.Town,
-			Title:     request.Title,
-			StartDate: request.StartDate,
-			EndDate:   request.EndDate,
-			SelectedAccomodation: []AccomodationDetail{
-				{
-					Name:     request.Accomodation,
-					RoadName: "",
-				},
-			},
-			Timeline: request.Timelines,
+			Country:              request.Country,
+			Town:                 request.Town,
+			Title:                request.Title,
+			StartDate:            request.StartDate,
+			EndDate:              request.EndDate,
+			Budget:               fmt.Sprintf("%d - %d", request.MinBudget, request.MaxBudget),
+			SelectedAccomodation: accList,
+			Timeline:             request.Timelines,
 		},
 	}
 
