@@ -120,12 +120,13 @@ type AccomodationDetail struct {
 }
 
 type TimelineDetail struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image       string `json:"image"`
+	Landmark    string `json:"landmark"`
+	RoadName    string `json:"roadName"`
+	Time        string `json:"time"`
+	Town        string `json:"town"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
 }
 
 func GetHistoryDetail(c *gin.Context) {
@@ -195,9 +196,10 @@ func GetHistoryDetail(c *gin.Context) {
 	sendResponse(c, http.StatusOK, resp, "History detail retrieved")
 }
 
-func HistoryDetailPlace(c *gin.Context) {
+func GetHistoryDetailPlace(c *gin.Context) {
 	userID, _ := c.Get("userID")
 	var h models.History
+
 	idParam := c.Param("id")
 	if err := database.DB.
 		Where("id = ? AND user_id = ?", idParam, userID).
@@ -205,6 +207,35 @@ func HistoryDetailPlace(c *gin.Context) {
 		sendResponse(c, http.StatusNotFound, nil, "Not found")
 		return
 	}
+
+	var timelines map[string][]TimelineDetail
+	if err := json.Unmarshal([]byte(h.Timelines), &timelines); err != nil {
+		sendResponse(c, http.StatusInternalServerError, nil, "Invalid timeline data")
+		return
+	}
+
+	date := c.Query("date")
+	idxOneBased, err := strconv.Atoi(c.Query("item"))
+	if err != nil || idxOneBased < 1 {
+		sendResponse(c, http.StatusBadRequest, nil, "Invalid item; must be 1 or greater")
+		return
+	}
+	idx := idxOneBased - 1
+
+	dayItems, ok := timelines[date]
+	if !ok || idx >= len(dayItems) {
+		sendResponse(c, http.StatusBadRequest, nil, "Place not found for that date/item")
+		return
+	}
+
+	place := dayItems[idx]
+	payload := gin.H{
+		"name":        place.Landmark,
+		"image":       place.Image,
+		"description": place.Description,
+	}
+
+	sendResponse(c, http.StatusOK, payload, "Place detail retrieved")
 }
 
 func DeleteHistory(c *gin.Context) {

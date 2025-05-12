@@ -12,6 +12,7 @@ func Routes(r *gin.Engine) {
 	{
 		historyGroup.GET("/", history.GetHistories)
 		historyGroup.GET("/:id", history.GetHistoryDetail)
+		historyGroup.GET("/:id/place", history.GetHistoryDetailPlace)
 		historyGroup.DELETE("/:id", history.DeleteHistory)
 	}
 }

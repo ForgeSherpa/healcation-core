@@ -140,23 +140,24 @@ func Timeline(c *gin.Context) {
 }
 
 type SelectPlaceRequest struct {
-	Country      string                      `json:"country"`
-	Town         string                      `json:"town"`
-	StartDate    string                      `json:"startDate"`
-	EndDate      string                      `json:"endDate"`
-	Accomodation string                      `json:"accomodation"`
-	Title        string                      `json:"title"`
-	Timelines    map[string][]TimelineDetail `json:"timelines"`
-	Budget       string                      `json:"budget"`
+	Country        string                      `json:"country"`
+	Town           string                      `json:"town"`
+	StartDate      string                      `json:"startDate"`
+	EndDate        string                      `json:"endDate"`
+	Accommodations []AccomodationDetail        `json:"accommodations"`
+	Title          string                      `json:"title"`
+	Timelines      map[string][]TimelineDetail `json:"timelines"`
+	Budget         string                      `json:"budget"`
 }
 
 type TimelineDetail struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image       string `json:"image"`
+	Landmark    string `json:"landmark"`
+	RoadName    string `json:"roadName"`
+	Time        string `json:"time"`
+	Town        string `json:"town"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
 }
 
 type SelectPlaceResponse struct {
@@ -209,8 +210,7 @@ func SelectPlace(c *gin.Context) {
 			}
 		}
 	}
-	accList := []AccomodationDetail{{Name: request.Accomodation, RoadName: ""}}
-	accJSON, err := json.Marshal(accList)
+	accJSON, err := json.Marshal(request.Accommodations)
 	if err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal accommodations")
 		return
@@ -249,7 +249,7 @@ func SelectPlace(c *gin.Context) {
 			StartDate:            request.StartDate,
 			EndDate:              request.EndDate,
 			Budget:               request.Budget,
-			SelectedAccomodation: accList,
+			SelectedAccomodation: request.Accommodations,
 			Timeline:             request.Timelines,
 		},
 	}

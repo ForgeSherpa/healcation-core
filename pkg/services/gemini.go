@@ -335,12 +335,13 @@ type PlaceTimeline struct {
 }
 
 type Place struct {
-	Image    string `json:"image"`
-	Landmark string `json:"landmark"`
-	RoadName string `json:"roadName"`
-	Time     string `json:"time"`
-	Town     string `json:"town"`
-	Type     string `json:"type"`
+	Image       string `json:"image"`
+	Landmark    string `json:"landmark"`
+	RoadName    string `json:"roadName"`
+	Time        string `json:"time"`
+	Town        string `json:"town"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
 }
 
 func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
@@ -358,7 +359,7 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 Harap berikan respons dalam format JSON dengan struktur berikut:
 
 {
-  "budget": "min - max dalam IDR",
+  "budget": "estimasi dalam IDR ; contoh 1.000.000",
   "country": "%s",
   "town": "%s",
   "title": "Gemini Generated",
@@ -369,7 +370,8 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
         "roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
         "time": "Waktu kunjungan",
         "town": "%s",
-        "type": "Jenis tempat (Museum, Landmark, dll)"
+        "type": "Hotel ; Staycation ; Food ; Event ; Local Event ; Tourist Attraction ; Museum ; Historical Site ; History Site ; Cultural Site",
+		"description": "Deskripsi lengkap mengenai tempat wisata, dalam 3 kalimat, isinya semua berupa pesona tempat wisatra saja ; contoh Nikmati pesiar sungai Seine di malam hari. Saksikan landmark-landmark kota diterangi dengan indah. Ini adalah cara romantis dan santai untuk melihat Paris dari perspektif yang berbeda.",
       }
     ]
   }
