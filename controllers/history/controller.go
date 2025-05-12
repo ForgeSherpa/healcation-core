@@ -38,16 +38,7 @@ type HistoryResponse struct {
 }
 
 func GetHistories(c *gin.Context) {
-	uidValue, exists := c.Get("userID")
-	if !exists {
-		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
-		return
-	}
-	userID, ok := uidValue.(uint)
-	if !ok {
-		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
-		return
-	}
+	userID, _ := c.Get("userID")
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -68,7 +59,8 @@ func GetHistories(c *gin.Context) {
 	countQ := database.DB.Model(&models.History{}).
 		Where("user_id = ?", userID)
 	if search != "" {
-		countQ = countQ.Where("LOWER(town) LIKE ?", pattern)
+		lowered := strings.ToLower(search)
+		countQ = countQ.Where("LOWER(town) LIKE ?", "%"+lowered+"%")
 	}
 	if err := countQ.Count(&totalRecords).Error; err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Failed to count histories: "+err.Error())
@@ -146,16 +138,7 @@ type TimelineDetail struct {
 }
 
 func GetHistoryDetail(c *gin.Context) {
-	uidValue, exists := c.Get("userID")
-	if !exists {
-		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
-		return
-	}
-	userID, ok := uidValue.(uint)
-	if !ok {
-		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
-		return
-	}
+	userID, _ := c.Get("userID")
 	var h models.History
 	idParam := c.Param("id")
 	if err := database.DB.
@@ -201,7 +184,7 @@ func GetHistoryDetail(c *gin.Context) {
 	}
 
 	resp := struct {
-		ID           string      `json:"id"`
+		ID           uint        `json:"id"`
 		Budget       string      `json:"budget"`
 		Town         string      `json:"town"`
 		Country      string      `json:"country"`
@@ -209,7 +192,7 @@ func GetHistoryDetail(c *gin.Context) {
 		EndDate      string      `json:"endDate"`
 		PlaceVisited []DateGroup `json:"placeVisited"`
 	}{
-		ID:           strconv.FormatUint(uint64(h.ID), 10),
+		ID:           h.ID,
 		Budget:       fmt.Sprintf("%d - %d", h.BudgetMin, h.BudgetMax),
 		Town:         h.Town,
 		Country:      h.Country,
@@ -222,16 +205,7 @@ func GetHistoryDetail(c *gin.Context) {
 }
 
 func DeleteHistory(c *gin.Context) {
-	uidValue, exists := c.Get("userID")
-	if !exists {
-		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
-		return
-	}
-	userID, ok := uidValue.(uint)
-	if !ok {
-		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
-		return
-	}
+	userID, _ := c.Get("userID")
 
 	id := c.Param("id")
 	var history models.History

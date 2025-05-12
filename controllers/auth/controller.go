@@ -104,9 +104,6 @@ func Login(c *gin.Context) {
 	} else if config.IsProduction {
 		accessExp = time.Now().Add(7 * 24 * time.Hour)
 		refreshExp = time.Now().Add(30 * 24 * time.Hour)
-	} else {
-		sendResponse(c, http.StatusInternalServerError, nil, "Environment tidak di-set dengan benar")
-		return
 	}
 
 	userIDStr := strconv.FormatUint(uint64(user.ID), 10)
