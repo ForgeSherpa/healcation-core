@@ -2,7 +2,6 @@ package history
 
 import (
 	"encoding/json"
-	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"math"
@@ -96,21 +95,13 @@ func GetHistories(c *gin.Context) {
 
 	responseHistories := make([]HistoryResponse, 0)
 	for _, h := range histories {
-		firstImage := ""
-		var imgs []string
-		if err := json.Unmarshal([]byte(h.Image), &imgs); err == nil {
-			if len(imgs) > 0 {
-				firstImage = imgs[0]
-			}
-		}
-
 		responseHistories = append(responseHistories, HistoryResponse{
 			ID:        h.ID,
 			Country:   h.Country,
 			Town:      h.Town,
 			StartDate: h.StartDate.Format(time.RFC3339),
 			EndDate:   h.EndDate.Format(time.RFC3339),
-			Image:     firstImage,
+			Image:     h.Image,
 		})
 	}
 
@@ -129,12 +120,12 @@ type AccomodationDetail struct {
 }
 
 type TimelineDetail struct {
-	Image    []string `json:"image"`
-	Landmark string   `json:"landmark"`
-	RoadName string   `json:"roadName"`
-	Time     string   `json:"time"`
-	Town     string   `json:"town"`
-	Type     string   `json:"type"`
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
 }
 
 func GetHistoryDetail(c *gin.Context) {
@@ -155,12 +146,12 @@ func GetHistoryDetail(c *gin.Context) {
 	json.Unmarshal([]byte(h.Timelines), &timelines)
 
 	type PlaceData struct {
-		Type     string   `json:"type"`
-		Landmark string   `json:"landmark"`
-		RoadName string   `json:"roadName"`
-		Town     string   `json:"town"`
-		Time     string   `json:"time"`
-		Image    []string `json:"image"`
+		Type     string `json:"type"`
+		Landmark string `json:"landmark"`
+		RoadName string `json:"roadName"`
+		Town     string `json:"town"`
+		Time     string `json:"time"`
+		Image    string `json:"image"`
 	}
 	type DateGroup struct {
 		Date string      `json:"date"`
@@ -193,7 +184,7 @@ func GetHistoryDetail(c *gin.Context) {
 		PlaceVisited []DateGroup `json:"placeVisited"`
 	}{
 		ID:           h.ID,
-		Budget:       fmt.Sprintf("%d - %d", h.BudgetMin, h.BudgetMax),
+		Budget:       h.Budget,
 		Town:         h.Town,
 		Country:      h.Country,
 		StartDate:    h.StartDate.Format(time.RFC3339Nano),
@@ -202,6 +193,18 @@ func GetHistoryDetail(c *gin.Context) {
 	}
 
 	sendResponse(c, http.StatusOK, resp, "History detail retrieved")
+}
+
+func HistoryDetailPlace(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	var h models.History
+	idParam := c.Param("id")
+	if err := database.DB.
+		Where("id = ? AND user_id = ?", idParam, userID).
+		First(&h).Error; err != nil {
+		sendResponse(c, http.StatusNotFound, nil, "Not found")
+		return
+	}
 }
 
 func DeleteHistory(c *gin.Context) {

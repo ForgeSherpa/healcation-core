@@ -12,9 +12,8 @@ type History struct {
 	Title          string    `json:"title"`
 	StartDate      time.Time `json:"startDate"`
 	EndDate        time.Time `json:"endDate"`
-	BudgetMin      int       `json:"budgetMin"`
-	BudgetMax      int       `json:"budgetMax"`
+	Budget         string    `json:"budget"`
 	Accommodations string    `json:"accommodations" gorm:"type:json"`
 	Timelines      string    `json:"timelines" gorm:"type:json"`
-	Image          string    `json:"image" gorm:"type:json"`
+	Image          string    `json:"image"`
 }

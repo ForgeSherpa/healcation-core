@@ -3,7 +3,6 @@ package travel
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"healcationBackend/pkg/services"
@@ -148,17 +147,16 @@ type SelectPlaceRequest struct {
 	Accomodation string                      `json:"accomodation"`
 	Title        string                      `json:"title"`
 	Timelines    map[string][]TimelineDetail `json:"timelines"`
-	MinBudget    int                         `json:"minBudget"`
-	MaxBudget    int                         `json:"maxBudget"`
+	Budget       string                      `json:"budget"`
 }
 
 type TimelineDetail struct {
-	Image    []string `json:"image"`
-	Landmark string   `json:"landmark"`
-	RoadName string   `json:"roadName"`
-	Time     string   `json:"time"`
-	Town     string   `json:"town"`
-	Type     string   `json:"type"`
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
 }
 
 type SelectPlaceResponse struct {
@@ -191,16 +189,8 @@ func parseDate(dateStr string) time.Time {
 }
 
 func SelectPlace(c *gin.Context) {
-	userIDValue, exists := c.Get("userID")
-	if !exists {
-		sendResponse(c, http.StatusUnauthorized, nil, "Unauthorized: user not found in context")
-		return
-	}
-	userID, ok := userIDValue.(uint)
-	if !ok {
-		sendResponse(c, http.StatusInternalServerError, nil, "Invalid user ID type")
-		return
-	}
+	userIDValue, _ := c.Get("userID")
+	userID, _ := userIDValue.(uint)
 
 	var request SelectPlaceRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -208,17 +198,16 @@ func SelectPlace(c *gin.Context) {
 		return
 	}
 
-	var allImages []string
-	for _, dayDetails := range request.Timelines {
-		for _, detail := range dayDetails {
-			allImages = append(allImages, detail.Image...)
-			fmt.Println("All Images:", allImages)
+	var firstImage string
+	if details, ok := request.Timelines["1"]; ok && len(details) > 0 {
+		firstImage = details[0].Image
+	} else {
+		for _, details := range request.Timelines {
+			if len(details) > 0 {
+				firstImage = details[0].Image
+				break
+			}
 		}
-	}
-	imageJSON, err := json.Marshal(allImages)
-	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to process images")
-		return
 	}
 	accList := []AccomodationDetail{{Name: request.Accomodation, RoadName: ""}}
 	accJSON, err := json.Marshal(accList)
@@ -240,11 +229,10 @@ func SelectPlace(c *gin.Context) {
 		Title:          request.Title,
 		StartDate:      parseDate(request.StartDate),
 		EndDate:        parseDate(request.EndDate),
-		BudgetMin:      request.MinBudget,
-		BudgetMax:      request.MaxBudget,
+		Budget:         request.Budget,
 		Accommodations: string(accJSON),
 		Timelines:      string(tlJSON),
-		Image:          string(imageJSON),
+		Image:          firstImage,
 	}
 
 	if err := database.DB.Create(&history).Error; err != nil {
@@ -260,7 +248,7 @@ func SelectPlace(c *gin.Context) {
 			Title:                request.Title,
 			StartDate:            request.StartDate,
 			EndDate:              request.EndDate,
-			Budget:               fmt.Sprintf("%d - %d", request.MinBudget, request.MaxBudget),
+			Budget:               request.Budget,
 			SelectedAccomodation: accList,
 			Timeline:             request.Timelines,
 		},
