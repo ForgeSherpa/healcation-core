@@ -454,7 +454,7 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, e
 	return response, nil
 }
 
-// Fitur LandmarkDetail
+// Fitur GetPlaceDetail
 
 // LandmarkDetail holds the description and images for a landmark
 type LandmarkDetail struct {
