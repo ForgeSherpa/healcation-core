@@ -118,7 +118,7 @@ func (s GeminiService) Search(query string) ([]PlaceSearch, error) {
 // Fitur GetPlaces
 type PlaceGetPlaces struct {
 	Description string   `json:"description"`
-	Image       []string `json:"image"` // Mengubah image menjadi array
+	Image       []string `json:"image"`
 	Name        string   `json:"name"`
 	Town        string   `json:"town"`
 	Type        string   `json:"type"`
@@ -250,88 +250,88 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 	return response, nil
 }
 
-func (s GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
-	apiKey := config.GeminiAPIKey
-	if apiKey == "" {
-		return PlaceDetail{}, fmt.Errorf("API Key tidak ditemukan")
-	}
+// func (s GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
+// 	apiKey := config.GeminiAPIKey
+// 	if apiKey == "" {
+// 		return PlaceDetail{}, fmt.Errorf("API Key tidak ditemukan")
+// 	}
 
-	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
+// 	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
 
-	typeInfo := ""
-	if placeType == "accommodation" {
-		typeInfo = "Tempat ini adalah akomodasi (hotel atau penginapan)."
-	}
+// 	typeInfo := ""
+// 	if placeType == "accommodation" {
+// 		typeInfo = "Tempat ini adalah akomodasi (hotel atau penginapan)."
+// 	}
 
-	prompt := fmt.Sprintf(`Berikan informasi tentang tempat bernama "%s" di kota %s, %s. %s
-Harap kembalikan data dalam format JSON sebagai berikut:
+// 	prompt := fmt.Sprintf(`Berikan informasi tentang tempat bernama "%s" di kota %s, %s. %s
+// Harap kembalikan data dalam format JSON sebagai berikut:
 
-{
-  "name": "%s",
-  "description": "Deskripsi singkat"
-}
+// {
+//   "name": "%s",
+//   "description": "Deskripsi singkat"
+// }
 
-Hanya kembalikan JSON di atas tanpa teks tambahan.`, name, city, country, typeInfo, name)
+// Hanya kembalikan JSON di atas tanpa teks tambahan.`, name, city, country, typeInfo, name)
 
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": prompt}},
-			},
-		},
-	})
-	if err != nil {
-		return PlaceDetail{}, err
-	}
+// 	requestBody, err := json.Marshal(map[string]interface{}{
+// 		"contents": []map[string]interface{}{
+// 			{
+// 				"role":  "user",
+// 				"parts": []map[string]string{{"text": prompt}},
+// 			},
+// 		},
+// 	})
+// 	if err != nil {
+// 		return PlaceDetail{}, err
+// 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return PlaceDetail{}, err
-	}
-	defer resp.Body.Close()
+// 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
+// 	if err != nil {
+// 		return PlaceDetail{}, err
+// 	}
+// 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return PlaceDetail{}, err
-	}
+// 	body, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return PlaceDetail{}, err
+// 	}
 
-	var geminiResp struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-	}
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		return PlaceDetail{}, err
-	}
+// 	var geminiResp struct {
+// 		Candidates []struct {
+// 			Content struct {
+// 				Parts []struct {
+// 					Text string `json:"text"`
+// 				} `json:"parts"`
+// 			} `json:"content"`
+// 		} `json:"candidates"`
+// 	}
+// 	if err := json.Unmarshal(body, &geminiResp); err != nil {
+// 		return PlaceDetail{}, err
+// 	}
 
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return PlaceDetail{}, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-	}
+// 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+// 		return PlaceDetail{}, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
+// 	}
 
-	rawJSON := removeMarkdownCodeBlock(geminiResp.Candidates[0].Content.Parts[0].Text)
+// 	rawJSON := removeMarkdownCodeBlock(geminiResp.Candidates[0].Content.Parts[0].Text)
 
-	var placeDetail PlaceDetail
-	if err := json.Unmarshal([]byte(rawJSON), &placeDetail); err != nil {
-		return PlaceDetail{}, err
-	}
+// 	var placeDetail PlaceDetail
+// 	if err := json.Unmarshal([]byte(rawJSON), &placeDetail); err != nil {
+// 		return PlaceDetail{}, err
+// 	}
 
-	imageURLs, err := GetGoogleImages(name)
-	if err == nil {
-		placeDetail.Image = imageURLs[0]
-	}
+// 	imageURLs, err := GetGoogleImages(name)
+// 	if err == nil {
+// 		placeDetail.Image = imageURLs[0]
+// 	}
 
-	return placeDetail, nil
-}
+// 	return placeDetail, nil
+// }
 
 // fitur timeline
 type PlaceTimeline struct {
-	Name      string `json:"name"`
-	TimeOfDay string `json:"timeOfDay"`
+	Places    []string `json:"places"`
+	TimeOfDay string   `json:"timeOfDay"`
 }
 
 type Place struct {
@@ -344,10 +344,9 @@ type Place struct {
 	Description string `json:"description"`
 }
 
-func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
-	Name      string `json:"name"`
-	TimeOfDay string `json:"timeOfDay"`
-}) (map[string]interface{}, error) {
+func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string,
+	places []SelectedPlace,
+) (map[string]interface{}, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, errors.New("API Key tidak ditemukan")
@@ -453,4 +452,88 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, e
 	}
 
 	return response, nil
+}
+
+// Fitur LandmarkDetail
+
+// LandmarkDetail holds the description and images for a landmark
+type LandmarkDetail struct {
+	Description string   `json:"description"`
+	Images      []string `json:"images"`
+}
+
+func (s GeminiService) GetPlaceDetail(placeType, landmark, town string) (map[string]interface{}, error) {
+	apiKey := config.GeminiAPIKey
+	if apiKey == "" {
+		return nil, fmt.Errorf("API Key tidak ditemukan")
+	}
+
+	apiURL := config.GeminiAPIKey
+
+	prompt := fmt.Sprintf(`"""
+Berikan deskripsi tentang %s bernama \"%s\" di %s.
+Harap kembalikan data dalam format JSON:
+{
+  "description": "Deskripsi singkat tentang tempat ini"
+}
+Hanya kembalikan JSON tanpa teks tambahan(dalam bahasa indonesia).
+"""`, placeType, landmark, town)
+
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"role":  "user",
+				"parts": []map[string]string{{"text": prompt}},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var geminiResponse struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.Unmarshal(body, &geminiResponse); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
+	}
+
+	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
+	}
+
+	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
+
+	var detail LandmarkDetail
+
+	if err := json.Unmarshal([]byte(rawJSON), &detail); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
+	}
+
+	images, err := GetGoogleImagesPlaces(landmark)
+	if err == nil && len(images) >= 2 {
+		detail.Images = images[:2]
+	}
+
+	return map[string]interface{}{
+		"description": detail.Description,
+		"images":      detail.Images,
+	}, nil
 }

@@ -63,18 +63,19 @@ func (m GeminiMockService) GetPlaces(preferences []string, country, town string)
 	return result, nil
 }
 
-func (m GeminiMockService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
-	return PlaceDetail{
-		Name:        name,
-		Image:       "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/1d/f8/1c/13/padma-resort-ubud.jpg?w=1200&h=-1&s=1",
-		Description: "Hotel sederhana yang terletak di Tanjung Pinang. Informasi lebih detail mengenai fasilitas, harga, dan ketersediaan kamar sebaiknya dicari melalui platform pemesanan hotel atau menghubungi langsung hotel tersebut.",
+func (m GeminiMockService) GetPlaceDetail(placeType, landmark, town string) (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"description": "Menara Eiffel adalah menara besi kisi yang terletak di Champ de Mars, Paris, Prancis. Dibangun pada tahun 1889 sebagai pintu masuk untuk Eksposisi Universelle, ia telah menjadi ikon global Prancis dan salah satu struktur paling dikenal di dunia. Pengunjung dapat naik ke atas untuk menikmati pemandangan kota Paris yang spektakuler.",
+		"images": []string{
+			"https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg/1200px-Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg",
+			"https://www.toureiffel.paris/themes/custom/tour_eiffel/build/images/home-discover-bg.jpg",
+		},
 	}, nil
 }
 
-func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
-	Name      string `json:"name"`
-	TimeOfDay string `json:"timeOfDay"`
-}) (map[string]interface{}, error) {
+func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, endDate string,
+	places []SelectedPlace,
+) (map[string]interface{}, error) {
 	timeline := map[string][]map[string]string{
 		"2024-08-12": {
 			{

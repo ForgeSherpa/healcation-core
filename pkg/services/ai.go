@@ -18,14 +18,21 @@ type PlaceDetail struct {
 	Description string `json:"description"`
 }
 
+type SelectedPlace struct {
+	TimeOfDay string   `json:"timeOfDay"`
+	Places    []string `json:"places"`
+}
+
 type AIService interface {
 	Search(query string) ([]PlaceSearch, error)
 	GetPlaces(preferences []string, country, town string) (map[string]interface{}, error)
-	GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error)
-	GetTimeline(accommodation, town, country, startDate, endDate string, places []struct {
-		Name      string `json:"name"`
-		TimeOfDay string `json:"timeOfDay"`
-	}) (map[string]interface{}, error)
+	// GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error)
+	GetTimeline(
+		accommodation, town, country, startDate, endDate string,
+		places []SelectedPlace,
+	) (map[string]interface{}, error)
+
+	GetPlaceDetail(placeType, landmark, town string) (map[string]interface{}, error)
 }
 
 var ErrGeminiUnavailable = errors.New("gemini service is unavailable")

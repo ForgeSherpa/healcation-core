@@ -7,7 +7,6 @@ import (
 	"healcationBackend/models"
 	"healcationBackend/pkg/services"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -58,20 +57,20 @@ func GetPlaces(c *gin.Context) {
 	sendResponse(c, http.StatusOK, gin.H{"places": placesData}, "Places retrieved successfully")
 }
 
-func GetPlaceDetail(c *gin.Context) {
-	placeName, err := url.QueryUnescape(c.Param("name"))
-	if err != nil {
-		sendResponse(c, http.StatusBadRequest, nil, "Invalid place name")
-		return
-	}
+type LandmarkDetailResponse struct {
+	Description string   `json:"description"`
+	Images      []string `json:"images"`
+}
 
-	var request struct {
-		Country string `json:"country"`
-		City    string `json:"city"`
-		Type    string `json:"type"`
+func GetPlaceDetail(c *gin.Context) {
+	var req struct {
+		Type     string `json:"type" binding:"required"`
+		Landmark string `json:"landmark" binding:"required"`
+		Town     string `json:"town" binding:"required"`
 	}
-	if err := c.ShouldBindJSON(&request); err != nil {
-		sendResponse(c, http.StatusBadRequest, nil, "Invalid request format: "+err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil {
+		sendResponse(c, http.StatusBadRequest, nil,
+			"Invalid or missing JSON fields: "+err.Error())
 		return
 	}
 
@@ -85,25 +84,27 @@ func GetPlaceDetail(c *gin.Context) {
 		return
 	}
 
-	placeDetail, err := aiSvc.GetPlaceDetail(placeName, request.Type, request.Country, request.City)
+	detailMap, err := aiSvc.GetPlaceDetail(req.Type, req.Landmark, req.Town)
 	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch place details from AI Service: "+err.Error())
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to fetch landmark details from AI Service: "+err.Error())
 		return
 	}
 
-	sendResponse(c, http.StatusOK, gin.H{"place_detail": placeDetail}, "Place detail retrieved successfully")
+	resp := LandmarkDetailResponse{
+		Description: detailMap["description"].(string),
+		Images:      detailMap["images"].([]string),
+	}
+
+	sendResponse(c, http.StatusOK, resp, "Place detail retrieved successfully")
 }
 
 type TimelineRequest struct {
-	Accomodation string `json:"accomodation"`
-	Town         string `json:"town"`
-	Country      string `json:"country"`
-	StartDate    string `json:"startDate"`
-	EndDate      string `json:"endDate"`
-	Places       []struct {
-		Name      string `json:"name"`
-		TimeOfDay string `json:"timeOfDay"`
-	} `json:"places"`
+	Accomodation  string                   `json:"accomodation"`
+	Town          string                   `json:"town"`
+	Country       string                   `json:"country"`
+	StartDate     string                   `json:"startDate"`
+	EndDate       string                   `json:"endDate"`
+	SelectedPlace []services.SelectedPlace `json:"selectedPlace"`
 }
 
 func Timeline(c *gin.Context) {
@@ -129,7 +130,7 @@ func Timeline(c *gin.Context) {
 		request.Country,
 		request.StartDate,
 		request.EndDate,
-		request.Places,
+		request.SelectedPlace,
 	)
 	if err != nil {
 		sendResponse(c, http.StatusInternalServerError, nil, "Gagal mendapatkan response dari AI Service: "+err.Error())
@@ -151,13 +152,12 @@ type SelectPlaceRequest struct {
 }
 
 type TimelineDetail struct {
-	Image       string `json:"image"`
-	Landmark    string `json:"landmark"`
-	RoadName    string `json:"roadName"`
-	Time        string `json:"time"`
-	Town        string `json:"town"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
+	Image    string `json:"image"`
+	Landmark string `json:"landmark"`
+	RoadName string `json:"roadName"`
+	Time     string `json:"time"`
+	Town     string `json:"town"`
+	Type     string `json:"type"`
 }
 
 type SelectPlaceResponse struct {

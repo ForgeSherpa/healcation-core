@@ -100,7 +100,7 @@ func Login(c *gin.Context) {
 	var accessExp, refreshExp time.Time
 	if config.IsStaging {
 		accessExp = time.Now().Add(2 * time.Hour)
-		refreshExp = time.Now().Add(2 * time.Hour)
+		refreshExp = time.Now().Add(2*time.Hour + 1*time.Second)
 	} else if config.IsProduction {
 		accessExp = time.Now().Add(7 * 24 * time.Hour)
 		refreshExp = time.Now().Add(30 * 24 * time.Hour)
