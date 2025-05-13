@@ -8,14 +8,10 @@ import (
 )
 
 func Routes(r *gin.Engine) {
-	publicPlanner := r.Group("/planner")
-	{
-		publicPlanner.GET("/popular", planner.GetPopularDestinations)
-	}
-
 	privatePlanner := r.Group("/planner")
 	privatePlanner.Use(middleware.Validate())
 	{
 		privatePlanner.GET("/search", planner.SearchPlanner)
+		privatePlanner.GET("/popular", planner.SearchPlanner)
 	}
 }
