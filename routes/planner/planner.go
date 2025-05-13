@@ -12,6 +12,6 @@ func Routes(r *gin.Engine) {
 	privatePlanner.Use(middleware.Validate())
 	{
 		privatePlanner.GET("/search", planner.SearchPlanner)
-		privatePlanner.GET("/popular", planner.SearchPlanner)
+		privatePlanner.GET("/popular", planner.GetPopularDestinations)
 	}
 }
