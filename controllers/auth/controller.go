@@ -97,10 +97,23 @@ func Login(c *gin.Context) {
 		sendResponse(c, http.StatusUnauthorized, nil, "Email atau password salah")
 		return
 	}
+
+	debugMode := c.Query("debug") != ""
+
+	if debugMode && config.IsProduction {
+		sendResponse(c, http.StatusNotFound, nil, "Not Found")
+		return
+	}
+
 	var accessExp, refreshExp time.Time
 	if config.IsStaging {
-		accessExp = time.Now().Add(2 * time.Hour)
-		refreshExp = time.Now().Add(2*time.Hour + 1*time.Second)
+		if debugMode {
+			accessExp = time.Now().Add(2 * time.Minute)
+			refreshExp = time.Now().Add(5 * time.Minute)
+		} else {
+			accessExp = time.Now().Add(2 * time.Hour)
+			refreshExp = time.Now().Add(2*time.Hour + 1*time.Second)
+		}
 	} else if config.IsProduction {
 		accessExp = time.Now().Add(7 * 24 * time.Hour)
 		refreshExp = time.Now().Add(30 * 24 * time.Hour)
