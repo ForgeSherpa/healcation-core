@@ -140,18 +140,39 @@ func Timeline(c *gin.Context) {
 	sendResponse(c, http.StatusOK, response, "Timeline retrieved successfully")
 }
 
-type SelectPlaceRequest struct {
-	Country        string                      `json:"country"`
-	Town           string                      `json:"town"`
-	StartDate      string                      `json:"startDate"`
-	EndDate        string                      `json:"endDate"`
-	Accommodations []AccomodationDetail        `json:"accommodations"`
-	Title          string                      `json:"title"`
-	Timelines      map[string][]TimelineDetail `json:"timelines"`
-	Budget         string                      `json:"budget"`
+type DayPlace struct {
+	Date string         `json:"date"`
+	Data []placeVisited `json:"data"`
 }
 
-type TimelineDetail struct {
+type placeVisited struct {
+	Image    []string `json:"image"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Time     string   `json:"time"`
+	Town     string   `json:"town"`
+	Type     string   `json:"type"`
+}
+
+type SelectPlaceRequest struct {
+	Country      string     `json:"country"`
+	Town         string     `json:"town"`
+	StartDate    string     `json:"startDate"`
+	EndDate      string     `json:"endDate"`
+	PlaceVisited []DayPlace `json:"placeVisited"`
+	Budget       string     `json:"budget"`
+}
+
+type PlaceData struct {
+	Country      string     `json:"country"`
+	Town         string     `json:"town"`
+	StartDate    string     `json:"startDate"`
+	EndDate      string     `json:"endDate"`
+	Budget       string     `json:"budget"`
+	PlaceVisited []DayPlace `json:"placeVisited"`
+}
+
+type placeVisitedSimple struct {
 	Image    string `json:"image"`
 	Landmark string `json:"landmark"`
 	RoadName string `json:"roadName"`
@@ -161,24 +182,8 @@ type TimelineDetail struct {
 }
 
 type SelectPlaceResponse struct {
-	Message string    `json:"message"`
-	Data    PlaceData `json:"data"`
-}
-
-type PlaceData struct {
-	Country              string                      `json:"country"`
-	Town                 string                      `json:"town"`
-	Title                string                      `json:"title"`
-	StartDate            string                      `json:"startDate"`
-	EndDate              string                      `json:"endDate"`
-	Budget               string                      `json:"budget"`
-	SelectedAccomodation []AccomodationDetail        `json:"selectedAccomodation"`
-	Timeline             map[string][]TimelineDetail `json:"timeline"`
-}
-
-type AccomodationDetail struct {
-	Name     string `json:"name"`
-	RoadName string `json:"roadName"`
+	Message string                          `json:"message"`
+	Data    map[string][]placeVisitedSimple `json:"data"`
 }
 
 func parseDate(dateStr string) time.Time {
@@ -193,66 +198,69 @@ func SelectPlace(c *gin.Context) {
 	userIDValue, _ := c.Get("userID")
 	userID, _ := userIDValue.(uint)
 
-	var request SelectPlaceRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	var req SelectPlaceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		sendResponse(c, http.StatusBadRequest, nil, "Invalid request format: "+err.Error())
 		return
 	}
 
-	var firstImage string
-	if details, ok := request.Timelines["1"]; ok && len(details) > 0 {
-		firstImage = details[0].Image
-	} else {
-		for _, details := range request.Timelines {
-			if len(details) > 0 {
-				firstImage = details[0].Image
-				break
+	visitMap := make(map[string][]placeVisitedSimple)
+	for _, day := range req.PlaceVisited {
+		if day.Date == "" || len(day.Data) == 0 {
+			continue
+		}
+		for _, v := range day.Data {
+			// pick first image or empty
+			img := ""
+			if len(v.Image) > 0 {
+				img = v.Image[0]
 			}
+			simple := placeVisitedSimple{
+				Image:    img,
+				Landmark: v.Landmark,
+				RoadName: v.RoadName,
+				Time:     v.Time,
+				Town:     v.Town,
+				Type:     v.Type,
+			}
+			visitMap[day.Date] = append(visitMap[day.Date], simple)
 		}
 	}
-	accJSON, err := json.Marshal(request.Accommodations)
-	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal accommodations")
-		return
+
+	firstImage := ""
+	for _, visits := range visitMap {
+		if len(visits) > 0 {
+			firstImage = visits[0].Image
+			break
+		}
 	}
 
-	tlJSON, err := json.Marshal(request.Timelines)
+	tlJSON, err := json.Marshal(visitMap)
 	if err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal timelines")
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to marshal placeVisited: "+err.Error())
 		return
 	}
 
 	history := models.History{
-		UserID:         userID,
-		Country:        request.Country,
-		Town:           request.Town,
-		Title:          request.Title,
-		StartDate:      parseDate(request.StartDate),
-		EndDate:        parseDate(request.EndDate),
-		Budget:         request.Budget,
-		Accommodations: string(accJSON),
-		Timelines:      string(tlJSON),
-		Image:          firstImage,
+		UserID:    userID,
+		Country:   req.Country,
+		Town:      req.Town,
+		StartDate: parseDate(req.StartDate),
+		EndDate:   parseDate(req.EndDate),
+		Budget:    req.Budget,
+		Timelines: string(tlJSON),
+		Image:     firstImage,
 	}
 
 	if err := database.DB.Create(&history).Error; err != nil {
-		sendResponse(c, http.StatusInternalServerError, nil, "Failed to save history")
+		sendResponse(c, http.StatusInternalServerError, nil, "Failed to save history: "+err.Error())
 		return
 	}
 
-	response := SelectPlaceResponse{
+	resp := SelectPlaceResponse{
 		Message: "Done! Enjoy your vacation!",
-		Data: PlaceData{
-			Country:              request.Country,
-			Town:                 request.Town,
-			Title:                request.Title,
-			StartDate:            request.StartDate,
-			EndDate:              request.EndDate,
-			Budget:               request.Budget,
-			SelectedAccomodation: request.Accommodations,
-			Timeline:             request.Timelines,
-		},
+		Data:    visitMap,
 	}
 
-	sendResponse(c, http.StatusOK, response, "Place selection saved successfully")
+	sendResponse(c, http.StatusOK, resp, "Place selection saved successfully")
 }

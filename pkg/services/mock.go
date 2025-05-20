@@ -1,6 +1,6 @@
 package services
 
-import "fmt"
+import "encoding/json"
 
 type GeminiMockService struct{}
 
@@ -78,6 +78,166 @@ func (m GeminiMockService) GetPlaceDetail(placeType, landmark, town string) (map
 func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, endDate string,
 	places []SelectedPlace,
 ) (*TimelineResponse, error) {
-	fmt.Print("Mocking GetTimeline")
-	return nil, nil
+	raw := []byte(`{
+        "budget": "5.000.000",
+        "town": "Paris",
+        "country": "France",
+        "startDate": "2024-08-12",
+        "endDate": "2024-08-16",
+        "placeVisited": [
+            {
+                "date": "2024-08-12",
+                "data": [
+                    {
+                        "type": "Hotel",
+                        "landmark": "Hotel Paris",
+                        "roadName": "To be determined",
+                        "town": "Paris",
+                        "time": "14:00",
+                        "image": [
+                            "https://media-cdn.tripadvisor.com/media/photo-s/2a/01/a6/b0/facade-solly-hotel-paris.jpg",
+                            "https://anoushkaprobyn.com/wp-content/uploads/2024/02/Disneyland-Hotel-Paris-Review2.jpg"
+                        ]
+                    }
+                ]
+            },
+            {
+                "date": "2024-08-13",
+                "data": [
+                    {
+                        "type": "Landmark",
+                        "landmark": "Menara Eiffel",
+                        "roadName": "Champ de Mars, 5 Avenue Anatole France",
+                        "town": "Paris",
+                        "time": "09:00",
+                        "image": [
+                            "https://i.pinimg.com/474x/78/c4/58/78c45898090779bb3bf0b37b7ac2bcfe.jpg",
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/250px-Tour_Eiffel_Wikimedia_Commons.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Museum",
+                        "landmark": "Centre Georges-Pompidou",
+                        "roadName": "Place Georges-Pompidou",
+                        "town": "Paris",
+                        "time": "14:00",
+                        "image": [
+                            "https://images.adsttc.com/media/images/6515/ba44/7316/3253/1be0/7822/newsletter/architecture-classics-centre-georges-pompidou-renzo-piano-building-workshop-plus-richard-rogers_11.jpg?1695922762",
+                            "https://www.centrepompidou.fr/fileadmin/_processed_/2/4/csm_collection-notrebatiment-photofacaderuerambuteau2021_1920x750_af5ca8a213.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Museum",
+                        "landmark": "Musée Picasso",
+                        "roadName": "5 Rue de Thorigny",
+                        "town": "Paris",
+                        "time": "19:00",
+                        "image": [
+                            "https://www.museepicassoparis.fr/sites/default/files/2020-01/Horaires---Musee-Picasso---Voyez-Vous-%28Chloe-Vollmer-Lo%29--8697.jpg",
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/H%C3%B4tel_Sal%C3%A9.JPG/1200px-H%C3%B4tel_Sal%C3%A9.JPG"
+                        ]
+                    }
+                ]
+            },
+            {
+                "date": "2024-08-14",
+                "data": [
+                    {
+                        "type": "Landmark",
+                        "landmark": "Menara Eiffel",
+                        "roadName": "Champ de Mars, 5 Avenue Anatole France",
+                        "town": "Paris",
+                        "time": "09:00",
+                        "image": [
+                            "https://i.pinimg.com/474x/78/c4/58/78c45898090779bb3bf0b37b7ac2bcfe.jpg",
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/250px-Tour_Eiffel_Wikimedia_Commons.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Museum",
+                        "landmark": "Centre Georges-Pompidou",
+                        "roadName": "Place Georges-Pompidou",
+                        "town": "Paris",
+                        "time": "14:00",
+                        "image": [
+                            "https://images.adsttc.com/media/images/6515/ba44/7316/3253/1be0/7822/newsletter/architecture-classics-centre-georges-pompidou-renzo-piano-building-workshop-plus-richard-rogers_11.jpg?1695922762",
+                            "https://www.centrepompidou.fr/fileadmin/_processed_/2/4/csm_collection-notrebatiment-photofacaderuerambuteau2021_1920x750_af5ca8a213.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Park",
+                        "landmark": "Parc de la Villette",
+                        "roadName": "211 Avenue Jean Jaurès",
+                        "town": "Paris",
+                        "time": "19:00",
+                        "image": [
+                            "https://upload.wikimedia.org/wikipedia/commons/e/ed/Rio_Samba_School_statue_%40_Parc_de_La_Villette_%40_Paris_%2828881779791%29.jpg",
+                            "https://www.tschumi.com/cms/assets/2c88af60-b8d2-4044-92c7-8806472ecc3d?width=700&fit=contain"
+                        ]
+                    }
+                ]
+            },
+            {
+                "date": "2024-08-15",
+                "data": [
+                    {
+                        "type": "Landmark",
+                        "landmark": "Menara Eiffel",
+                        "roadName": "Champ de Mars, 5 Avenue Anatole France",
+                        "town": "Paris",
+                        "time": "09:00",
+                        "image": [
+                            "https://i.pinimg.com/474x/78/c4/58/78c45898090779bb3bf0b37b7ac2bcfe.jpg",
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/250px-Tour_Eiffel_Wikimedia_Commons.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Museum",
+                        "landmark": "Centre Georges-Pompidou",
+                        "roadName": "Place Georges-Pompidou",
+                        "town": "Paris",
+                        "time": "14:00",
+                        "image": [
+                            "https://images.adsttc.com/media/images/6515/ba44/7316/3253/1be0/7822/newsletter/architecture-classics-centre-georges-pompidou-renzo-piano-building-workshop-plus-richard-rogers_11.jpg?1695922762",
+                            "https://www.centrepompidou.fr/fileadmin/_processed_/2/4/csm_collection-notrebatiment-photofacaderuerambuteau2021_1920x750_af5ca8a213.jpg"
+                        ]
+                    },
+                    {
+                        "type": "Museum",
+                        "landmark": "Musée Picasso",
+                        "roadName": "5 Rue de Thorigny",
+                        "town": "Paris",
+                        "time": "19:00",
+                        "image": [
+                            "https://www.museepicassoparis.fr/sites/default/files/2020-01/Horaires---Musee-Picasso---Voyez-Vous-%28Chloe-Vollmer-Lo%29--8697.jpg",
+                            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/H%C3%B4tel_Sal%C3%A9.JPG/1200px-H%C3%B4tel_Sal%C3%A9.JPG"
+                        ]
+                    }
+                ]
+            },
+            {
+                "date": "2024-08-16",
+                "data": [
+                    {
+                        "type": "Hotel",
+                        "landmark": "Hotel Paris",
+                        "roadName": "To be determined",
+                        "town": "Paris",
+                        "time": "11:00",
+                        "image": [
+                            "https://media-cdn.tripadvisor.com/media/photo-s/2a/01/a6/b0/facade-solly-hotel-paris.jpg",
+                            "https://anoushkaprobyn.com/wp-content/uploads/2024/02/Disneyland-Hotel-Paris-Review2.jpg"
+                        ]
+                    }
+                ]
+            }
+        ]
+    }`)
+
+	var resp TimelineResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+
 }

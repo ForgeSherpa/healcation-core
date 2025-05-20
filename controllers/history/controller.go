@@ -114,11 +114,6 @@ func GetHistories(c *gin.Context) {
 	}, "Histories retrieved successfully")
 }
 
-type AccomodationDetail struct {
-	Name     string `json:"name"`
-	RoadName string `json:"roadName"`
-}
-
 type TimelineDetail struct {
 	Image    string `json:"image"`
 	Landmark string `json:"landmark"`
@@ -138,9 +133,6 @@ func GetHistoryDetail(c *gin.Context) {
 		sendResponse(c, http.StatusNotFound, nil, "Not found")
 		return
 	}
-
-	var accoms []AccomodationDetail
-	json.Unmarshal([]byte(h.Accommodations), &accoms)
 
 	var timelines map[string][]TimelineDetail
 	json.Unmarshal([]byte(h.Timelines), &timelines)
