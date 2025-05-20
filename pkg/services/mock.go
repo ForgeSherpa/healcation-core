@@ -79,7 +79,7 @@ func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, 
 	places []SelectedPlace,
 ) (*TimelineResponse, error) {
 	raw := []byte(`{
-        "budget": "5.000.000",
+        "budget": "5000000",
         "town": "Paris",
         "country": "France",
         "startDate": "2024-08-12",
