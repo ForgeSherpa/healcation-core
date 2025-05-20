@@ -1,5 +1,7 @@
 package services
 
+import "fmt"
+
 type GeminiMockService struct{}
 
 func NewGeminiMockService() AIService {
@@ -75,76 +77,7 @@ func (m GeminiMockService) GetPlaceDetail(placeType, landmark, town string) (map
 
 func (m GeminiMockService) GetTimeline(accommodation, town, country, startDate, endDate string,
 	places []SelectedPlace,
-) (map[string]interface{}, error) {
-	timeline := map[string][]map[string]string{
-		"2024-08-12": {
-			{
-				"image":    "https://www.deluxefrance.com/public/img/big/ParisCDGairportwithplanejpg_652951e7cfa0c4.73613563.jpg",
-				"landmark": "Arrival in Paris",
-				"roadName": "Charles de Gaulle Airport (CDG)",
-				"time":     "Afternoon",
-				"town":     "Paris",
-				"type":     "Arrival",
-			},
-			{
-				"image":    "https://www.cataloniahotels.com/en/blog/wp-content/uploads/2022/03/check-in-hotel.jpg",
-				"landmark": "Check in to Hotel",
-				"roadName": "Rue de Rivoli",
-				"time":     "Evening",
-				"town":     "Paris",
-				"type":     "Accommodation",
-			},
-			{
-				"image":    "https://media.tacdn.com/media/attractions-splice-spp-674x446/07/8f/2d/63.jpg",
-				"landmark": "Dinner near the Seine",
-				"roadName": "Quai des Grands Augustins",
-				"time":     "Night",
-				"town":     "Paris",
-				"type":     "Restaurant",
-			},
-		},
-		"2024-08-13": {
-			{
-				"image":    "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg/640px-Tour_Eiffel_Wikimedia_Commons_%28cropped%29.jpg",
-				"landmark": "Eiffel Tower",
-				"roadName": "Champ de Mars",
-				"time":     "Morning",
-				"town":     "Paris",
-				"type":     "Landmark",
-			},
-			{
-				"image":    "https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/MG-Paris-Champ_de_Mars.jpg/1200px-MG-Paris-Champ_de_Mars.jpg",
-				"landmark": "Champ de Mars",
-				"roadName": "Avenue Anatole France",
-				"time":     "Afternoon",
-				"town":     "Paris",
-				"type":     "Park",
-			},
-			{
-				"image":    "https://www.cruiseontheseine.com/wp-content/uploads/2023/11/seine-river-cruise-1024x686.jpg",
-				"landmark": "Seine River Cruise",
-				"roadName": "Port de la Bourdonnais",
-				"time":     "Late Afternoon",
-				"town":     "Paris",
-				"type":     "Activity",
-			},
-			{
-				"image":    "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/03/51/9c/c2/chartier.jpg?w=900&h=500&s=1",
-				"landmark": "Dinner at Le Bouillon Chartier",
-				"roadName": "Rue du Faubourg Montmartre",
-				"time":     "Night",
-				"town":     "Paris",
-				"type":     "Restaurant",
-			},
-		},
-	}
-
-	result := map[string]interface{}{
-		"budget":   "Rp 7.500.000 - Rp 15.000.000",
-		"country":  "France Static",
-		"timeline": timeline,
-		"title":    "Parisian Adventure: A 5-Day Itinerary",
-		"town":     "Paris",
-	}
-	return result, nil
+) (*TimelineResponse, error) {
+	fmt.Print("Mocking GetTimeline")
+	return nil, nil
 }

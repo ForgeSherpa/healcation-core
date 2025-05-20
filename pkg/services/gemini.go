@@ -329,24 +329,34 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences,
 // }
 
 // fitur timeline
-type PlaceTimeline struct {
-	Places    []string `json:"places"`
-	TimeOfDay string   `json:"timeOfDay"`
+type PlaceVisitedDetail struct {
+	Type     string   `json:"type"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Town     string   `json:"town"`
+	Time     string   `json:"time"`
+	Image    []string `json:"image"`
 }
 
-type Place struct {
-	Image       string `json:"image"`
-	Landmark    string `json:"landmark"`
-	RoadName    string `json:"roadName"`
-	Time        string `json:"time"`
-	Town        string `json:"town"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
+// DailyVisit groups visits by date
+type DailyVisit struct {
+	Date string               `json:"date"`
+	Data []PlaceVisitedDetail `json:"data"`
+}
+
+// TimelineResponse is the full response shape
+type TimelineResponse struct {
+	Budget       string       `json:"budget"`
+	Town         string       `json:"town"`
+	Country      string       `json:"country"`
+	StartDate    string       `json:"startDate"`
+	EndDate      string       `json:"endDate"`
+	PlaceVisited []DailyVisit `json:"placeVisited"`
 }
 
 func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string,
 	places []SelectedPlace,
-) (map[string]interface{}, error) {
+) (*TimelineResponse, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, errors.New("API Key tidak ditemukan")
@@ -354,28 +364,44 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 
 	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
 
-	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s, %s pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
+	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s (akomodasi), di %s, %s, pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
 Harap berikan respons dalam format JSON dengan struktur berikut:
-
 {
   "budget": "estimasi dalam IDR ; contoh 1.000.000",
   "country": "%s",
   "town": "%s",
-  "title": "Gemini Generated",
-  "timeline": {
-    "YYYY-MM-DD": [
+  "startDate": "2024-11-01",
+  "endDate": "2024-11-01",
+  "placeVisited": [{
+    "date": "2024-11-01",
+    "data": [
       {
-        "landmark": "Nama tempat",
+        "type": "Hotel",
+        "landmark": "Hotel Paris",
+		"roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
+        "town": "Paris",
+        "time": "14:00",
+      },
+      {
+        "type": "Historical Site",
+        "landmark": "Eiffel Tower",
         "roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
-        "time": "Waktu kunjungan",
-        "town": "%s",
-        "type": "Hotel ; Staycation ; Food ; Event ; Local Event ; Tourist Attraction ; Museum ; Historical Site ; History Site ; Cultural Site",
-		"description": "Deskripsi lengkap mengenai tempat wisata, dalam 3 kalimat, isinya semua berupa pesona tempat wisatra saja ; contoh Nikmati pesiar sungai Seine di malam hari. Saksikan landmark-landmark kota diterangi dengan indah. Ini adalah cara romantis dan santai untuk melihat Paris dari perspektif yang berbeda.",
-      }
-    ]
+        "town": "Paris",
+        "time": "19:00",
+      ]
+    }]
   }
-}
-Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, endDate, places, country, town, town)
+Hanya kembalikan JSON di atas tanpa teks tambahan.`,
+		accommodation, // %s akomodasi
+		town,          // %s kota
+		country,       // %s negara
+		startDate,     // %s tgl mulai
+		endDate,       // %s tgl selesai
+		places,        // %v daftar tempat
+		country,       // %s untuk field "country"
+		town,          // %s untuk field "town"
+
+	)
 
 	requestBody, err := json.Marshal(map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -420,38 +446,23 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, startDate, e
 
 	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
 
-	var result struct {
-		Budget   string             `json:"budget"`
-		Country  string             `json:"country"`
-		Town     string             `json:"town"`
-		Title    string             `json:"title"`
-		Timeline map[string][]Place `json:"timeline"`
-	}
-
+	var result TimelineResponse
 	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
 		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
 	}
 
-	for date, places := range result.Timeline {
-		for i := range places {
-			name := places[i].Landmark
-			imageURLs, err := GetGoogleImages(name)
-			if err == nil && len(imageURLs) > 0 {
-				places[i].Image = imageURLs[0]
+	for di, daily := range result.PlaceVisited {
+		for pi, place := range daily.Data {
+			name := place.Landmark
+			imageURLs, err := GetGoogleImagesPlaces(name)
+			if err == nil && len(imageURLs) >= 2 {
+				result.PlaceVisited[di].Data[pi].Image = imageURLs[:2]
 			}
 		}
-		result.Timeline[date] = places
 	}
 
-	response := map[string]interface{}{
-		"budget":   result.Budget,
-		"country":  result.Country,
-		"town":     result.Town,
-		"title":    result.Title,
-		"timeline": result.Timeline,
-	}
+	return &result, nil
 
-	return response, nil
 }
 
 // Fitur GetPlaceDetail

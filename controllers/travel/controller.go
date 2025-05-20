@@ -137,7 +137,7 @@ func Timeline(c *gin.Context) {
 		return
 	}
 
-	sendResponse(c, http.StatusOK, gin.H{"timeline": response}, "Timeline retrieved successfully")
+	sendResponse(c, http.StatusOK, response, "Timeline retrieved successfully")
 }
 
 type SelectPlaceRequest struct {

@@ -30,7 +30,7 @@ type AIService interface {
 	GetTimeline(
 		accommodation, town, country, startDate, endDate string,
 		places []SelectedPlace,
-	) (map[string]interface{}, error)
+	) (*TimelineResponse, error)
 
 	GetPlaceDetail(placeType, landmark, town string) (map[string]interface{}, error)
 }
