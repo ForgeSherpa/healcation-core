@@ -136,7 +136,7 @@ func GetHistoryDetail(c *gin.Context) {
 
 	var timelines map[string][]TimelineDetail
 	json.Unmarshal([]byte(h.Timelines), &timelines)
-
+	// Check if the unmarshalling was successful
 	type PlaceData struct {
 		Type     string `json:"type"`
 		Landmark string `json:"landmark"`
