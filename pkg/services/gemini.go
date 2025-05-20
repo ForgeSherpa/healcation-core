@@ -367,7 +367,7 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s (akomodasi), di %s, %s, pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
 Harap berikan respons dalam format JSON dengan struktur berikut:
 {
-  "budget": "estimasi dalam IDR ; contoh 1.000.000",
+  "budget": "estimasi dalam IDR ; contoh 1000000",
   "country": "%s",
   "town": "%s",
   "startDate": "2024-11-01",
