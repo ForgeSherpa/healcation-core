@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -99,8 +98,8 @@ func GetHistories(c *gin.Context) {
 			ID:        h.ID,
 			Country:   h.Country,
 			Town:      h.Town,
-			StartDate: h.StartDate.Format(time.RFC3339),
-			EndDate:   h.EndDate.Format(time.RFC3339),
+			StartDate: h.StartDate.Format("2006-01-02"),
+			EndDate:   h.EndDate.Format("2006-01-02"),
 			Image:     h.Image,
 		})
 	}
@@ -179,8 +178,8 @@ func GetHistoryDetail(c *gin.Context) {
 		Budget:       h.Budget,
 		Town:         h.Town,
 		Country:      h.Country,
-		StartDate:    h.StartDate.Format(time.RFC3339Nano),
-		EndDate:      h.EndDate.Format(time.RFC3339Nano),
+		StartDate:    h.StartDate.Format("2006-01-02"),
+		EndDate:      h.EndDate.Format("2006-01-02"),
 		PlaceVisited: placeVisited,
 	}
 

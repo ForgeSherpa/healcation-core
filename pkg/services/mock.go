@@ -26,12 +26,14 @@ func (m GeminiMockService) GetPlaces(preferences []string, country, town string)
 				"https://ecom-cvweb.s3-us-west-2.amazonaws.com/s3fs-public/styles/hotel_hero_image/public/le-bristol-paris-v46-3-16-2017.jpg?itok=xPUyqeTe",
 			},
 			"name": "Le Bristol Paris - Oetker Collection",
+			"town": "paris",
 		},
 		{
 			"image": []string{
 				"https://www.dorchestercollection.com/media/ipgftz4o/h%C3%B4tel-plaza-ath%C3%A9n%C3%A9e-la-cour-jardin-courtyard-garden-dorchester-collection.jpg?rxy=0.47118440639507575%2C0.8476572327174599&width=746&height=810&rmode=crop",
 			},
 			"name": "Hotel Plaza Athénée - Dorchester Collection",
+			"town": "paris",
 		},
 	}
 

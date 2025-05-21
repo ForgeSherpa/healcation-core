@@ -125,8 +125,9 @@ type PlaceGetPlaces struct {
 }
 
 type AccommodationGetPlaces struct {
-	Image []string `json:"image"` // Mengubah image menjadi array
+	Image []string `json:"image"`
 	Name  string   `json:"name"`
+	Town  string   `json:"town"`
 }
 
 type GeminiResponseGetPlaces struct {
@@ -162,6 +163,7 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
   "accomodations": [
     {
       "name": "Nama akomodasi"
+	  "town": "Nama kota",
     }
   ],
   "places": [
