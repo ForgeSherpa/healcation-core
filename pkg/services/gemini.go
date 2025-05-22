@@ -171,7 +171,7 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
       "description": "Deskripsi singkat tentang tempat wisata",
       "name": "Nama tempat wisata",
       "town": "%s",
-      "type": "Jenis tempat wisata (contoh: Museum, Landmark, District, dll)"
+      "type": "Jenis tempat wisata (hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"
     }
   ]
 }
@@ -378,14 +378,14 @@ Harap berikan respons dalam format JSON dengan struktur berikut:
     "date": "2024-11-01",
     "data": [
       {
-        "type": "Hotel",
+        "type": "Hotel(hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"",
         "landmark": "Hotel Paris",
 		"roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
         "town": "Paris",
         "time": "14:00",
       },
       {
-        "type": "Historical Site",
+        "type": "Historical Site(hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"",
         "landmark": "Eiffel Tower",
         "roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
         "town": "Paris",
