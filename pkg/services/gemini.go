@@ -157,7 +157,7 @@ func (s GeminiService) GetPlaces(preferences []string, country, town string) (ma
 						"description": {Type: genai.TypeString, Description: "Brief description of the place."},
 						"name":        {Type: genai.TypeString, Description: "Name of the place."},
 						"town":        {Type: genai.TypeString, Description: "Town where the place is located."},
-						"type":        {Type: genai.TypeString, Description: "Type of place (e.g., Food, Historical Site, Cultural Site)."},
+						"type":        {Type: genai.TypeString, Description: "Type of place (hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)."},
 					},
 					Required: []string{"description", "name", "town", "type"},
 				},
@@ -248,7 +248,7 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 	placeVisitedDetailSchema := &genai.Schema{
 		Type: genai.TypeObject,
 		Properties: map[string]*genai.Schema{
-			"type":     {Type: genai.TypeString, Description: "Jenis tempat (misalnya: Hotel, Restoran, Tempat Wisata Sejarah, Taman, dll.)."},
+			"type":     {Type: genai.TypeString, Description: "Jenis tempat (hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)."},
 			"landmark": {Type: genai.TypeString, Description: "Nama spesifik tempat atau landmark."},
 			"roadName": {Type: genai.TypeString, Description: "Nama jalan lokasi. Harus diisi dan relevan."},
 			"town":     {Type: genai.TypeString, Description: "Nama kota atau daerah tempat ini berada."},
