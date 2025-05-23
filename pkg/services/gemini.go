@@ -1,15 +1,16 @@
 package services
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"healcationBackend/pkg/config"
-	"io"
-	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
 type GeminiService struct {
@@ -41,321 +42,191 @@ func cleanJSONResponse(response string) string {
 }
 
 // Fitur Search
-type GeminiResponseSearch struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
 func (s GeminiService) Search(query string) ([]PlaceSearch, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := config.GeminiAPIKey
+	ctx := context.Background()
 
-	prompt := fmt.Sprintf(`Cari informasi tentang destinasi "%s" dan berikan respons dalam format JSON seperti berikut:
-	{
-	  "results": [
-	    {
-	      "country": "Nama negara",
-	      "town": "Nama kota atau daerah"
-	    }
-	  ]
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat genai client: %w", err)
 	}
-	Hanya kembalikan JSON di atas tanpa teks tambahan.`, query)
+	defer client.Close()
 
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": prompt}},
+	model := client.GenerativeModel("gemini-2.0-flash")
+
+	responseSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"results": {
+				Type:        genai.TypeArray,
+				Description: "Daftar hasil pencarian destinasi.",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"country": {Type: genai.TypeString, Description: "Nama negara dari destinasi."},
+						"town":    {Type: genai.TypeString, Description: "Nama kota atau daerah dari destinasi."},
+					},
+					Required: []string{"country", "town"},
+				},
 			},
 		},
-	})
+		Required: []string{"results"},
+	}
+
+	model.GenerationConfig = genai.GenerationConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   responseSchema,
+	}
+
+	instructionLanguage := "Pastikan semua informasi nama negara dan kota disajikan dalam Bahasa Indonesia."
+	prompt := fmt.Sprintf(`Cari informasi tentang destinasi "%s". %s`, query, instructionLanguage)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal generate content dari Gemini: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format yang diharapkan")
 	}
 
-	var geminiResp GeminiResponseSearch
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		return nil, err
+	jsonTextPart, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if !ok {
+		if blob, isBlob := resp.Candidates[0].Content.Parts[0].(genai.Blob); isBlob && blob.MIMEType == "application/json" {
+			jsonTextPart = genai.Text(blob.Data)
+		} else {
+			return nil, fmt.Errorf("format part respon tidak terduga dari Gemini: %T. Diharapkan genai.Text", resp.Candidates[0].Content.Parts[0])
+		}
 	}
 
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-	}
+	rawJSON := cleanJSONResponse(string(jsonTextPart))
 
-	rawJSON := geminiResp.Candidates[0].Content.Parts[0].Text
-	cleanedJSON := cleanJSONResponse(rawJSON)
-
-	var result struct {
+	var searchResult struct {
 		Results []PlaceSearch `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(cleanedJSON), &result); err != nil {
-		return nil, err
+
+	if err := json.Unmarshal([]byte(rawJSON), &searchResult); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON dari teks respon Gemini: %w. \nJSON Mentah: %s", err, rawJSON)
 	}
 
-	return result.Results, nil
+	return searchResult.Results, nil
 }
 
 // Fitur GetPlaces
-type PlaceGetPlaces struct {
-	Description string   `json:"description"`
-	Image       []string `json:"image"`
-	Name        string   `json:"name"`
-	Town        string   `json:"town"`
-	Type        string   `json:"type"`
-}
-
-type AccommodationGetPlaces struct {
-	Image []string `json:"image"`
-	Name  string   `json:"name"`
-	Town  string   `json:"town"`
-}
-
-type GeminiResponseGetPlaces struct {
-	Accomodations []AccommodationGetPlaces `json:"accomodations"`
-	Places        []PlaceGetPlaces         `json:"places"`
-}
-
-type GeminiResponseSearchGetPlaces struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
 func (s GeminiService) GetPlaces(preferences []string, country, town string) (map[string]interface{}, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := config.GeminiAPIKey
+	ctx := context.Background()
 
-	prompt := fmt.Sprintf(`Berikan daftar tempat wisata dan akomodasi di %s, %s berdasarkan preferensi berikut: %v.
-Harap berikan respons dalam format JSON dengan struktur berikut:
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat genai client: %w", err)
+	}
+	defer client.Close()
 
-{
-  "preferences": %v,
-  "country": "%s",
-  "town": "%s",
-  "accomodations": [
-    {
-      "name": "Nama akomodasi"
-	  "town": "Nama kota",
-    }
-  ],
-  "places": [
-    {
-      "description": "Deskripsi singkat tentang tempat wisata",
-      "name": "Nama tempat wisata",
-      "town": "%s",
-      "type": "Jenis tempat wisata (hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"
-    }
-  ]
-}
-Hanya kembalikan JSON di atas tanpa teks tambahan.`, town, country, preferences, preferences, country, town, town)
+	model := client.GenerativeModel("gemini-2.0-flash")
 
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": prompt}},
+	responseSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"accomodations": {
+				Type:        genai.TypeArray,
+				Description: "List of recommended accommodations.",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"name": {Type: genai.TypeString, Description: "Name of the accommodation."},
+						"town": {Type: genai.TypeString, Description: "Town where the accommodation is located."},
+					},
+					Required: []string{"name", "town"},
+				},
+			},
+			"places": {
+				Type:        genai.TypeArray,
+				Description: "List of recommended tourist places.",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"description": {Type: genai.TypeString, Description: "Brief description of the place."},
+						"name":        {Type: genai.TypeString, Description: "Name of the place."},
+						"town":        {Type: genai.TypeString, Description: "Town where the place is located."},
+						"type":        {Type: genai.TypeString, Description: "Type of place (e.g., Food, Historical Site, Cultural Site)."},
+					},
+					Required: []string{"description", "name", "town", "type"},
+				},
 			},
 		},
-	})
+		Required: []string{"accomodations", "places"},
+	}
+
+	model.GenerationConfig = genai.GenerationConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   responseSchema,
+	}
+
+	instructionLanguage := "Pastikan semua informasi yang Anda berikan, termasuk nama tempat, nama akomodasi, deskripsi, dan tipe/kategori, disajikan dalam Bahasa Indonesia."
+
+	promptPreferences := fmt.Sprintf("%v", preferences)
+	prompt := fmt.Sprintf("Berikan daftar tempat wisata dan akomodasi di %s, %s berdasarkan preferensi berikut: %s.%s",
+		town, country, promptPreferences, instructionLanguage)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal generate content dari Gemini: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var geminiResponse struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format yang diharapkan")
 	}
 
-	if err := json.Unmarshal(body, &geminiResponse); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
-	}
-
-	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-	}
-
-	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
-
-	var result struct {
-		Places        []PlaceGetPlaces         `json:"places"`
-		Accomodations []AccommodationGetPlaces `json:"accomodations"`
-	}
-
-	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
-	}
-
-	for i := range result.Places {
-		name := result.Places[i].Name
-		imageURLs, err := GetGoogleImagesPlaces(name)
-		if err == nil {
-			result.Places[i].Image = imageURLs
+	jsonTextPart, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if !ok {
+		if blob, isBlob := resp.Candidates[0].Content.Parts[0].(genai.Blob); isBlob && blob.MIMEType == "application/json" {
+			jsonTextPart = genai.Text(blob.Data)
+		} else {
+			return nil, fmt.Errorf("format part respon tidak terduga dari Gemini: %T. Diharapkan genai.Text", resp.Candidates[0].Content.Parts[0])
 		}
 	}
 
-	for i := range result.Accomodations {
-		name := result.Accomodations[i].Name
+	rawJSON := removeMarkdownCodeBlock(string(jsonTextPart))
+
+	var geminiResult GeminiResponseGetPlaces
+	if err := json.Unmarshal([]byte(rawJSON), &geminiResult); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON dari teks respon Gemini: %w. \nJSON Mentah: %s", err, rawJSON)
+	}
+
+	for i := range geminiResult.Places {
+		name := geminiResult.Places[i].Name
+		imageURLs, err := GetGoogleImagesPlaces(name)
+		if err == nil {
+			geminiResult.Places[i].Image = imageURLs
+		}
+	}
+
+	for i := range geminiResult.Accomodations {
+		name := geminiResult.Accomodations[i].Name
 		imageURLs, err := GetGoogleImages(name)
 		if err == nil {
-			result.Accomodations[i].Image = imageURLs
+			geminiResult.Accomodations[i].Image = imageURLs
 		}
 	}
 
 	response := map[string]interface{}{
-		"accomodations": result.Accomodations,
-		"places":        result.Places,
+		"accomodations": geminiResult.Accomodations,
+		"places":        geminiResult.Places,
 	}
 
 	return response, nil
 }
 
-// func (s GeminiService) GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error) {
-// 	apiKey := config.GeminiAPIKey
-// 	if apiKey == "" {
-// 		return PlaceDetail{}, fmt.Errorf("API Key tidak ditemukan")
-// 	}
-
-// 	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
-
-// 	typeInfo := ""
-// 	if placeType == "accommodation" {
-// 		typeInfo = "Tempat ini adalah akomodasi (hotel atau penginapan)."
-// 	}
-
-// 	prompt := fmt.Sprintf(`Berikan informasi tentang tempat bernama "%s" di kota %s, %s. %s
-// Harap kembalikan data dalam format JSON sebagai berikut:
-
-// {
-//   "name": "%s",
-//   "description": "Deskripsi singkat"
-// }
-
-// Hanya kembalikan JSON di atas tanpa teks tambahan.`, name, city, country, typeInfo, name)
-
-// 	requestBody, err := json.Marshal(map[string]interface{}{
-// 		"contents": []map[string]interface{}{
-// 			{
-// 				"role":  "user",
-// 				"parts": []map[string]string{{"text": prompt}},
-// 			},
-// 		},
-// 	})
-// 	if err != nil {
-// 		return PlaceDetail{}, err
-// 	}
-
-// 	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-// 	if err != nil {
-// 		return PlaceDetail{}, err
-// 	}
-// 	defer resp.Body.Close()
-
-// 	body, err := io.ReadAll(resp.Body)
-// 	if err != nil {
-// 		return PlaceDetail{}, err
-// 	}
-
-// 	var geminiResp struct {
-// 		Candidates []struct {
-// 			Content struct {
-// 				Parts []struct {
-// 					Text string `json:"text"`
-// 				} `json:"parts"`
-// 			} `json:"content"`
-// 		} `json:"candidates"`
-// 	}
-// 	if err := json.Unmarshal(body, &geminiResp); err != nil {
-// 		return PlaceDetail{}, err
-// 	}
-
-// 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-// 		return PlaceDetail{}, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-// 	}
-
-// 	rawJSON := removeMarkdownCodeBlock(geminiResp.Candidates[0].Content.Parts[0].Text)
-
-// 	var placeDetail PlaceDetail
-// 	if err := json.Unmarshal([]byte(rawJSON), &placeDetail); err != nil {
-// 		return PlaceDetail{}, err
-// 	}
-
-// 	imageURLs, err := GetGoogleImages(name)
-// 	if err == nil {
-// 		placeDetail.Image = imageURLs[0]
-// 	}
-
-// 	return placeDetail, nil
-// }
-
 // fitur timeline
-type PlaceVisitedDetail struct {
-	Type     string   `json:"type"`
-	Landmark string   `json:"landmark"`
-	RoadName string   `json:"roadName"`
-	Town     string   `json:"town"`
-	Time     string   `json:"time"`
-	Image    []string `json:"image"`
-}
-
-// DailyVisit groups visits by date
-type DailyVisit struct {
-	Date string               `json:"date"`
-	Data []PlaceVisitedDetail `json:"data"`
-}
-
-// TimelineResponse is the full response shape
-type TimelineResponse struct {
-	Budget       string       `json:"budget"`
-	Town         string       `json:"town"`
-	Country      string       `json:"country"`
-	StartDate    string       `json:"startDate"`
-	EndDate      string       `json:"endDate"`
-	PlaceVisited []DailyVisit `json:"placeVisited"`
-}
-
 func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endDate string,
 	places []SelectedPlace,
 ) (*TimelineResponse, error) {
@@ -364,93 +235,110 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 		return nil, errors.New("API Key tidak ditemukan")
 	}
 
-	apiURL := config.GeminiAPIKey // TODO: kayaknya ini salah, harusnya ke endpoint Gemini
+	ctx := context.Background()
 
-	prompt := fmt.Sprintf(`Buatkan rencana perjalanan dari %s (akomodasi), di %s, %s, pada tanggal %s hingga %s berdasarkan tempat berikut: %v.
-Harap berikan respons dalam format JSON dengan struktur berikut:
-{
-  "budget": "estimasi dalam IDR ; contoh 1000000",
-  "country": "%s",
-  "town": "%s",
-  "startDate": "2024-11-01",
-  "endDate": "2024-11-01",
-  "placeVisited": [{
-    "date": "2024-11-01",
-    "data": [
-      {
-        "type": "Hotel(hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"",
-        "landmark": "Hotel Paris",
-		"roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
-        "town": "Paris",
-        "time": "14:00",
-      },
-      {
-        "type": "Historical Site(hotel ; staycation ; Food ; Foodie ; Events ; local event ; historical site ; History site ; Cultural Site)"",
-        "landmark": "Eiffel Tower",
-        "roadName": "Nama jalan (jangan kosong atau N/A, selalu isi dengan jalan yang relevan)",
-        "town": "Paris",
-        "time": "19:00",
-      ]
-    }]
-  }
-Hanya kembalikan JSON di atas tanpa teks tambahan.`,
-		accommodation, // %s akomodasi
-		town,          // %s kota
-		country,       // %s negara
-		startDate,     // %s tgl mulai
-		endDate,       // %s tgl selesai
-		places,        // %v daftar tempat
-		country,       // %s untuk field "country"
-		town,          // %s untuk field "town"
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat genai client: %w", err)
+	}
+	defer client.Close()
 
-	)
+	model := client.GenerativeModel("gemini-2.0-flash")
 
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": prompt}},
+	placeVisitedDetailSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"type":     {Type: genai.TypeString, Description: "Jenis tempat (misalnya: Hotel, Restoran, Tempat Wisata Sejarah, Taman, dll.)."},
+			"landmark": {Type: genai.TypeString, Description: "Nama spesifik tempat atau landmark."},
+			"roadName": {Type: genai.TypeString, Description: "Nama jalan lokasi. Harus diisi dan relevan."},
+			"town":     {Type: genai.TypeString, Description: "Nama kota atau daerah tempat ini berada."},
+			"time":     {Type: genai.TypeString, Description: "Waktu kunjungan atau kegiatan dalam format HH:MM (misalnya: 14:00)."},
+		},
+		Required: []string{"type", "landmark", "roadName", "town", "time"},
+	}
+
+	dailyVisitSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"date": {Type: genai.TypeString, Description: "Tanggal kunjungan dalam format YYYY-MM-DD."},
+			"data": {
+				Type:        genai.TypeArray,
+				Description: "Daftar detail tempat yang dikunjungi atau kegiatan pada tanggal tersebut.",
+				Items:       placeVisitedDetailSchema,
 			},
 		},
-	})
+		Required: []string{"date", "data"},
+	}
+
+	timelineResponseSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"budget":    {Type: genai.TypeString, Description: "Estimasi total budget perjalanan dalam IDR (misalnya: 1000000)."},
+			"town":      {Type: genai.TypeString, Description: "Nama kota utama untuk rencana perjalanan ini."},
+			"country":   {Type: genai.TypeString, Description: "Nama negara untuk rencana perjalanan ini."},
+			"startDate": {Type: genai.TypeString, Description: "Tanggal mulai perjalanan dalam format YYYY-MM-DD."},
+			"endDate":   {Type: genai.TypeString, Description: "Tanggal akhir perjalanan dalam format YYYY-MM-DD."},
+			"placeVisited": {
+				Type:        genai.TypeArray,
+				Description: "Rincian rencana perjalanan per hari.",
+				Items:       dailyVisitSchema,
+			},
+		},
+		Required: []string{"budget", "town", "country", "startDate", "endDate", "placeVisited"},
+	}
+
+	model.GenerationConfig = genai.GenerationConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   timelineResponseSchema,
+	}
+
+	var placesStrBuilder strings.Builder
+	if len(places) > 0 {
+		placesStrBuilder.WriteString("Berikut adalah preferensi waktu dan daftar tempat yang ingin dikunjungi: ")
+		for i, sp := range places {
+			if i > 0 {
+				placesStrBuilder.WriteString("; ")
+			}
+			placesStrBuilder.WriteString(fmt.Sprintf("Waktu '%s', tempat: [%s]", sp.TimeOfDay, strings.Join(sp.Places, ", ")))
+		}
+		placesStrBuilder.WriteString(".") // Akhiri kalimat
+	} else {
+		placesStrBuilder.WriteString("Tidak ada preferensi tempat spesifik yang diberikan untuk dipertimbangkan secara khusus.")
+	}
+
+	instructionLanguage := "Semua informasi, termasuk nama tempat, tipe, deskripsi jalan, kota, dan estimasi budget, harus dalam Bahasa Indonesia."
+	prompt := fmt.Sprintf(
+		"Buatkan rencana perjalanan dari akomodasi: %s, di kota/daerah: %s, negara: %s, dari tanggal %s hingga %s. "+
+			"%s "+
+			"Sertakan juga estimasi budget keseluruhan dalam IDR. %s",
+		accommodation, town, country, startDate, endDate,
+		placesStrBuilder.String(),
+		instructionLanguage,
+	)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal generate content dari Gemini: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format yang diharapkan")
 	}
 
-	var geminiResponse struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	jsonTextPart, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if !ok {
+		if blob, isBlob := resp.Candidates[0].Content.Parts[0].(genai.Blob); isBlob && blob.MIMEType == "application/json" {
+			jsonTextPart = genai.Text(blob.Data)
+		} else {
+			return nil, fmt.Errorf("format part respon tidak terduga dari Gemini: %T. Diharapkan genai.Text", resp.Candidates[0].Content.Parts[0])
+		}
 	}
 
-	if err := json.Unmarshal(body, &geminiResponse); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
-	}
-
-	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-	}
-
-	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
+	rawJSON := removeMarkdownCodeBlock(string(jsonTextPart))
 
 	var result TimelineResponse
 	if err := json.Unmarshal([]byte(rawJSON), &result); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
+		return nil, fmt.Errorf("gagal parsing JSON dari teks respon Gemini: %w. \nJSON Mentah: %s", err, rawJSON)
 	}
 
 	for di, daily := range result.PlaceVisited {
@@ -468,81 +356,78 @@ Hanya kembalikan JSON di atas tanpa teks tambahan.`,
 }
 
 // Fitur GetPlaceDetail
-
-// LandmarkDetail holds the description and images for a landmark
-type LandmarkDetail struct {
-	Description string   `json:"description"`
-	Images      []string `json:"images"`
-}
-
 func (s GeminiService) GetPlaceDetail(placeType, landmark, town string) (map[string]interface{}, error) {
 	apiKey := config.GeminiAPIKey
 	if apiKey == "" {
 		return nil, fmt.Errorf("API Key tidak ditemukan")
 	}
 
-	apiURL := config.GeminiAPIKey
+	ctx := context.Background()
 
-	prompt := fmt.Sprintf(`"""
-Berikan deskripsi tentang %s bernama \"%s\" di %s.
-Harap kembalikan data dalam format JSON:
-{
-  "description": "Deskripsi singkat tentang tempat ini"
-}
-Hanya kembalikan JSON tanpa teks tambahan(dalam bahasa indonesia).
-"""`, placeType, landmark, town)
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat genai client: %w", err)
+	}
+	defer client.Close()
 
-	requestBody, err := json.Marshal(map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": prompt}},
+	model := client.GenerativeModel("gemini-2.0-flash")
+
+	responseSchema := &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"description": {
+				Type:        genai.TypeString,
+				Description: "Deskripsi detail dan informatif tentang tempat atau landmark yang diminta, dalam Bahasa Indonesia.",
 			},
 		},
-	})
+		Required: []string{"description"},
+	}
+
+	model.GenerationConfig = genai.GenerationConfig{
+		ResponseMIMEType: "application/json",
+		ResponseSchema:   responseSchema,
+	}
+	instructionLanguage := "Semua informasi harus dalam Bahasa Indonesia."
+	prompt := fmt.Sprintf(`Berikan deskripsi detail tentang %s bernama "%s" yang terletak di %s. %s`,
+		placeType, landmark, town, instructionLanguage)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("gagal generate content dari Gemini: %w", err)
 	}
 
-	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var geminiResponse struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format yang diharapkan")
 	}
 
-	if err := json.Unmarshal(body, &geminiResponse); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON response: %v", err)
+	jsonTextPart, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	if !ok {
+		if blob, isBlob := resp.Candidates[0].Content.Parts[0].(genai.Blob); isBlob && blob.MIMEType == "application/json" {
+			jsonTextPart = genai.Text(blob.Data)
+		} else {
+			return nil, fmt.Errorf("format part respon tidak terduga dari Gemini: %T. Diharapkan genai.Text", resp.Candidates[0].Content.Parts[0])
+		}
 	}
 
-	if len(geminiResponse.Candidates) == 0 || len(geminiResponse.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("respon dari Gemini kosong atau tidak sesuai format")
-	}
+	rawJSON := removeMarkdownCodeBlock(string(jsonTextPart))
 
-	rawJSON := removeMarkdownCodeBlock(geminiResponse.Candidates[0].Content.Parts[0].Text)
+	var aiResponse struct {
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal([]byte(rawJSON), &aiResponse); err != nil {
+		return nil, fmt.Errorf("gagal parsing JSON dari teks respon Gemini: %w. \nJSON Mentah: %s", err, rawJSON)
+	}
 
 	var detail LandmarkDetail
+	detail.Description = aiResponse.Description
 
-	if err := json.Unmarshal([]byte(rawJSON), &detail); err != nil {
-		return nil, fmt.Errorf("gagal parsing JSON teks: %v", err)
-	}
-
-	images, err := GetGoogleImagesPlaces(landmark)
-	if err == nil && len(images) >= 2 {
-		detail.Images = images[:2]
+	images, imgErr := GetGoogleImagesPlaces(landmark)
+	if imgErr == nil && len(images) > 0 {
+		if len(images) >= 2 {
+			detail.Images = images[:2]
+		} else {
+			detail.Images = images
+		}
 	}
 
 	return map[string]interface{}{

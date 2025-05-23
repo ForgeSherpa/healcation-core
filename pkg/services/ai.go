@@ -23,10 +23,56 @@ type SelectedPlace struct {
 	Places    []string `json:"places"`
 }
 
+type PlaceGetPlaces struct {
+	Description string   `json:"description"`
+	Image       []string `json:"image"`
+	Name        string   `json:"name"`
+	Town        string   `json:"town"`
+	Type        string   `json:"type"`
+}
+
+type AccommodationGetPlaces struct {
+	Image []string `json:"image"`
+	Name  string   `json:"name"`
+	Town  string   `json:"town"`
+}
+
+type GeminiResponseGetPlaces struct {
+	Accomodations []AccommodationGetPlaces `json:"accomodations"`
+	Places        []PlaceGetPlaces         `json:"places"`
+}
+
+type PlaceVisitedDetail struct {
+	Type     string   `json:"type"`
+	Landmark string   `json:"landmark"`
+	RoadName string   `json:"roadName"`
+	Town     string   `json:"town"`
+	Time     string   `json:"time"`
+	Image    []string `json:"image"`
+}
+
+type DailyVisit struct {
+	Date string               `json:"date"`
+	Data []PlaceVisitedDetail `json:"data"`
+}
+
+type TimelineResponse struct {
+	Budget       string       `json:"budget"`
+	Town         string       `json:"town"`
+	Country      string       `json:"country"`
+	StartDate    string       `json:"startDate"`
+	EndDate      string       `json:"endDate"`
+	PlaceVisited []DailyVisit `json:"placeVisited"`
+}
+
+type LandmarkDetail struct {
+	Description string   `json:"description"`
+	Images      []string `json:"images"`
+}
+
 type AIService interface {
 	Search(query string) ([]PlaceSearch, error)
 	GetPlaces(preferences []string, country, town string) (map[string]interface{}, error)
-	// GetPlaceDetail(name, placeType, country, city string) (PlaceDetail, error)
 	GetTimeline(
 		accommodation, town, country, startDate, endDate string,
 		places []SelectedPlace,
