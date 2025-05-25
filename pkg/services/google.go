@@ -8,52 +8,34 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync/atomic"
 	"time"
-)
-
-var (
-	headCount int32
-	getCount  int32
 )
 
 func validateImageURL(client *http.Client, imageURL string) bool {
 	if !(strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://")) {
 		return false
 	}
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 
-	atomic.AddInt32(&headCount, 1)
-	fmt.Printf("[validateImageURL] HEAD call #%d to %s\n", atomic.LoadInt32(&headCount), imageURL)
-
-	headRes, err := client.Head(imageURL)
+	res, err := client.Head(imageURL)
 	if err == nil {
-		defer headRes.Body.Close()
-		if headRes.StatusCode == http.StatusOK {
-			ct := headRes.Header.Get("Content-Type")
-			if strings.HasPrefix(ct, "image/") {
+		defer res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			if strings.HasPrefix(res.Header.Get("Content-Type"), "image/") {
 				return true
 			}
 		}
 	}
-
-	atomic.AddInt32(&getCount, 1)
-	fmt.Printf("[validateImageURL] GET  call #%d to %s\n", atomic.LoadInt32(&getCount), imageURL)
-	getRes, err := client.Get(imageURL)
-	if err != nil {
+	resp, err := client.Get(imageURL)
+	if err != nil || resp.StatusCode != http.StatusOK {
 		return false
 	}
-	defer getRes.Body.Close()
-	if getRes.StatusCode != http.StatusOK {
-		return false
-	}
-
+	defer resp.Body.Close()
 	buf := make([]byte, 512)
-	n, err := io.ReadFull(getRes.Body, buf)
-	if err != nil && err != io.ErrUnexpectedEOF {
-		return false
-	}
-	detected := http.DetectContentType(buf[:n])
-	return strings.HasPrefix(detected, "image/")
+	n, _ := io.ReadFull(resp.Body, buf)
+	return strings.HasPrefix(http.DetectContentType(buf[:n]), "image/")
 }
 
 func fetchRawGoogleImages(query, apiKey, cx string, numToFetch, startIndex int) ([]struct {
@@ -107,28 +89,37 @@ func GetGoogleImages(query string) ([]string, error) {
 	client := &http.Client{
 		Timeout: 8 * time.Second,
 	}
-
 	validImageURLs := []string{}
-	const targetCount = 1
+	const (
+		targetCount = 1
+		maxAttempts = 5
+		baseFetch   = 2
+	)
 
-	startIndex := 1
-
-	maxAttempts := 5
-	for attempts := 0; attempts < maxAttempts && len(validImageURLs) < targetCount; attempts++ {
-		needed := targetCount - len(validImageURLs)
-		perCall := needed + 2
-		if perCall > 5 {
-			perCall = 5
+	for attempt := 0; attempt < maxAttempts && len(validImageURLs) < targetCount; attempt++ {
+		numToFetch := baseFetch + attempt
+		if numToFetch > 5 {
+			numToFetch = 5
 		}
 
-		items, err := fetchRawGoogleImages(query, apiKey, cx, perCall, startIndex)
-		if err != nil || len(items) == 0 {
+		items, err := fetchRawGoogleImages(query, apiKey, cx, numToFetch, 1)
+		if err != nil || len(items) < 1 {
 			break
 		}
 
-		processed := 0
-		for _, item := range items {
-			processed++
+		links := make([]string, len(items))
+		for i, itm := range items {
+			links[i] = itm.Link
+		}
+		fmt.Printf("[Attempt %d] fetched links: %v\n", attempt+1, links)
+
+		start := 0
+		if len(items) > 1 {
+			start = len(items) - 1
+		}
+		tailItems := items[start:]
+
+		for _, item := range tailItems {
 			if validateImageURL(client, item.Link) {
 				dup := false
 				for _, u := range validImageURLs {
@@ -145,12 +136,11 @@ func GetGoogleImages(query string) ([]string, error) {
 				}
 			}
 		}
-
-		startIndex += processed
 	}
 
-	if len(validImageURLs) == 0 {
-		return nil, fmt.Errorf("tidak ada URL gambar valid untuk query '%s' setelah %d percobaan", query, maxAttempts)
+	if len(validImageURLs) < targetCount {
+		return nil, fmt.Errorf("gagal menemukan %d gambar valid untuk '%s' setelah %d percobaan",
+			targetCount, query, maxAttempts)
 	}
 	return validImageURLs, nil
 }
@@ -167,28 +157,37 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 	client := &http.Client{
 		Timeout: 8 * time.Second,
 	}
-
 	validImageURLs := []string{}
-	const targetCount = 2
+	const (
+		targetCount = 1
+		maxAttempts = 5
+		baseFetch   = 3
+	)
 
-	startIndex := 1
-	maxAttempts := 5
-
-	for attempts := 0; attempts < maxAttempts && len(validImageURLs) < targetCount; attempts++ {
-		needed := targetCount - len(validImageURLs)
-		perCall := needed + 2
-		if perCall > 5 {
-			perCall = 5
+	for attempt := 0; attempt < maxAttempts && len(validImageURLs) < targetCount; attempt++ {
+		numToFetch := baseFetch + attempt
+		if numToFetch > 5 {
+			numToFetch = 5
 		}
 
-		items, err := fetchRawGoogleImages(query, apiKey, cx, perCall, startIndex)
-		if err != nil || len(items) == 0 {
+		items, err := fetchRawGoogleImages(query, apiKey, cx, numToFetch, 1)
+		if err != nil || len(items) < 1 {
 			break
 		}
 
-		processed := 0
-		for _, item := range items {
-			processed++
+		links := make([]string, len(items))
+		for i, itm := range items {
+			links[i] = itm.Link
+		}
+		fmt.Printf("[Attempt %d] fetched links: %v\n", attempt+1, links)
+
+		start := 0
+		if len(items) > 2 {
+			start = len(items) - 2
+		}
+		tailItems := items[start:]
+
+		for _, item := range tailItems {
 			if validateImageURL(client, item.Link) {
 				dup := false
 				for _, u := range validImageURLs {
@@ -205,12 +204,11 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 				}
 			}
 		}
-
-		startIndex += processed
 	}
 
-	if len(validImageURLs) == 0 {
-		return nil, fmt.Errorf("tidak ada URL gambar valid untuk query '%s' setelah %d percobaan", query, maxAttempts)
+	if len(validImageURLs) < targetCount {
+		return nil, fmt.Errorf("gagal menemukan %d gambar valid untuk '%s' setelah %d percobaan",
+			targetCount, query, maxAttempts)
 	}
 	return validImageURLs, nil
 }
