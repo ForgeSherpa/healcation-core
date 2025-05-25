@@ -8,10 +8,52 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
-func isValidURL(link string) bool {
-	return strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://")
+var (
+	headCount int32
+	getCount  int32
+)
+
+func validateImageURL(client *http.Client, imageURL string) bool {
+	if !(strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://")) {
+		return false
+	}
+
+	atomic.AddInt32(&headCount, 1)
+	fmt.Printf("[validateImageURL] HEAD call #%d to %s\n", atomic.LoadInt32(&headCount), imageURL)
+
+	headRes, err := client.Head(imageURL)
+	if err == nil {
+		defer headRes.Body.Close()
+		if headRes.StatusCode == http.StatusOK {
+			ct := headRes.Header.Get("Content-Type")
+			if strings.HasPrefix(ct, "image/") {
+				return true
+			}
+		}
+	}
+
+	atomic.AddInt32(&getCount, 1)
+	fmt.Printf("[validateImageURL] GET  call #%d to %s\n", atomic.LoadInt32(&getCount), imageURL)
+	getRes, err := client.Get(imageURL)
+	if err != nil {
+		return false
+	}
+	defer getRes.Body.Close()
+	if getRes.StatusCode != http.StatusOK {
+		return false
+	}
+
+	buf := make([]byte, 512)
+	n, err := io.ReadFull(getRes.Body, buf)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return false
+	}
+	detected := http.DetectContentType(buf[:n])
+	return strings.HasPrefix(detected, "image/")
 }
 
 func fetchRawGoogleImages(query, apiKey, cx string, numToFetch, startIndex int) ([]struct {
@@ -62,50 +104,40 @@ func GetGoogleImages(query string) ([]string, error) {
 		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
 	}
 
+	client := &http.Client{
+		Timeout: 8 * time.Second,
+	}
+
 	validImageURLs := []string{}
 	const targetCount = 1
 
-	startIndexForAPICall := 1
+	startIndex := 1
 
 	maxAttempts := 5
-	attempts := 0
-
-	for len(validImageURLs) < targetCount && attempts < maxAttempts {
-		attempts++
-
-		neededValidURLs := targetCount - len(validImageURLs)
-
-		numToFetchThisAttempt := neededValidURLs
-		if attempts == 1 {
-			numToFetchThisAttempt = targetCount + 1
-		} else {
-			numToFetchThisAttempt = neededValidURLs + 2
-		}
-		if numToFetchThisAttempt > 5 {
-			numToFetchThisAttempt = 5
+	for attempts := 0; attempts < maxAttempts && len(validImageURLs) < targetCount; attempts++ {
+		needed := targetCount - len(validImageURLs)
+		perCall := needed + 2
+		if perCall > 5 {
+			perCall = 5
 		}
 
-		items, err := fetchRawGoogleImages(query, apiKey, cx, numToFetchThisAttempt, startIndexForAPICall)
-		if err != nil {
+		items, err := fetchRawGoogleImages(query, apiKey, cx, perCall, startIndex)
+		if err != nil || len(items) == 0 {
 			break
 		}
 
-		if len(items) == 0 {
-			break
-		}
-
-		itemsProcessedFromThisFetch := 0
+		processed := 0
 		for _, item := range items {
-			itemsProcessedFromThisFetch++
-			if isValidURL(item.Link) {
-				isDuplicate := false
-				for _, existingURL := range validImageURLs {
-					if existingURL == item.Link {
-						isDuplicate = true
+			processed++
+			if validateImageURL(client, item.Link) {
+				dup := false
+				for _, u := range validImageURLs {
+					if u == item.Link {
+						dup = true
 						break
 					}
 				}
-				if !isDuplicate {
+				if !dup {
 					validImageURLs = append(validImageURLs, item.Link)
 					if len(validImageURLs) == targetCount {
 						break
@@ -114,17 +146,12 @@ func GetGoogleImages(query string) ([]string, error) {
 			}
 		}
 
-		startIndexForAPICall += itemsProcessedFromThisFetch
-
-		if len(validImageURLs) == targetCount {
-			break
-		}
+		startIndex += processed
 	}
 
 	if len(validImageURLs) == 0 {
-		return nil, fmt.Errorf("tidak ada URL gambar HTTP/HTTPS yang valid ditemukan untuk query: '%s' setelah %d percobaan", query, attempts)
+		return nil, fmt.Errorf("tidak ada URL gambar valid untuk query '%s' setelah %d percobaan", query, maxAttempts)
 	}
-
 	return validImageURLs, nil
 }
 
@@ -137,50 +164,40 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 		return nil, fmt.Errorf("google API Key atau CX tidak ditemukan")
 	}
 
+	client := &http.Client{
+		Timeout: 8 * time.Second,
+	}
+
 	validImageURLs := []string{}
 	const targetCount = 2
 
-	startIndexForAPICall := 1
-
+	startIndex := 1
 	maxAttempts := 5
-	attempts := 0
 
-	for len(validImageURLs) < targetCount && attempts < maxAttempts {
-		attempts++
-
-		neededValidURLs := targetCount - len(validImageURLs)
-
-		numToFetchThisAttempt := neededValidURLs
-		if attempts == 1 {
-			numToFetchThisAttempt = targetCount + 1
-		} else {
-			numToFetchThisAttempt = neededValidURLs + 2
-		}
-		if numToFetchThisAttempt > 5 {
-			numToFetchThisAttempt = 5
+	for attempts := 0; attempts < maxAttempts && len(validImageURLs) < targetCount; attempts++ {
+		needed := targetCount - len(validImageURLs)
+		perCall := needed + 2
+		if perCall > 5 {
+			perCall = 5
 		}
 
-		items, err := fetchRawGoogleImages(query, apiKey, cx, numToFetchThisAttempt, startIndexForAPICall)
-		if err != nil {
+		items, err := fetchRawGoogleImages(query, apiKey, cx, perCall, startIndex)
+		if err != nil || len(items) == 0 {
 			break
 		}
 
-		if len(items) == 0 {
-			break
-		}
-
-		itemsProcessedFromThisFetch := 0
+		processed := 0
 		for _, item := range items {
-			itemsProcessedFromThisFetch++
-			if isValidURL(item.Link) {
-				isDuplicate := false
-				for _, existingURL := range validImageURLs {
-					if existingURL == item.Link {
-						isDuplicate = true
+			processed++
+			if validateImageURL(client, item.Link) {
+				dup := false
+				for _, u := range validImageURLs {
+					if u == item.Link {
+						dup = true
 						break
 					}
 				}
-				if !isDuplicate {
+				if !dup {
 					validImageURLs = append(validImageURLs, item.Link)
 					if len(validImageURLs) == targetCount {
 						break
@@ -189,16 +206,11 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 			}
 		}
 
-		startIndexForAPICall += itemsProcessedFromThisFetch
-
-		if len(validImageURLs) == targetCount {
-			break
-		}
+		startIndex += processed
 	}
 
 	if len(validImageURLs) == 0 {
-		return nil, fmt.Errorf("tidak ada URL gambar HTTP/HTTPS yang valid ditemukan untuk query: '%s' setelah %d percobaan", query, attempts)
+		return nil, fmt.Errorf("tidak ada URL gambar valid untuk query '%s' setelah %d percobaan", query, maxAttempts)
 	}
-
 	return validImageURLs, nil
 }
