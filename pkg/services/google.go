@@ -159,7 +159,7 @@ func GetGoogleImagesPlaces(query string) ([]string, error) {
 	}
 	validImageURLs := []string{}
 	const (
-		targetCount = 1
+		targetCount = 2
 		maxAttempts = 5
 		baseFetch   = 3
 	)

@@ -301,7 +301,7 @@ func (s GeminiService) GetTimeline(accommodation, town, country, startDate, endD
 			}
 			placesStrBuilder.WriteString(fmt.Sprintf("Waktu '%s', tempat: [%s]", sp.TimeOfDay, strings.Join(sp.Places, ", ")))
 		}
-		placesStrBuilder.WriteString(".") // Akhiri kalimat
+		placesStrBuilder.WriteString(".")
 	} else {
 		placesStrBuilder.WriteString("Tidak ada preferensi tempat spesifik yang diberikan untuk dipertimbangkan secara khusus.")
 	}
