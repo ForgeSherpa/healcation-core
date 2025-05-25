@@ -89,21 +89,7 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	if data.Email != "" {
-		emailBaru := strings.ToLower(data.Email)
-
-		var count int64
-		database.DB.
-			Model(&models.User{}).
-			Where("email = ? AND id <> ?", emailBaru, userID).
-			Count(&count)
-
-		if count > 0 {
-			sendResponse(c, http.StatusBadRequest, nil, "Email ini sudah terdaftar")
-			return
-		}
-
-		updates["email"] = emailBaru
-
+		updates["email"] = strings.ToLower(data.Email)
 	}
 
 	if data.Password != "" {
