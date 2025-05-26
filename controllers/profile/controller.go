@@ -89,7 +89,22 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	if data.Email != "" {
-		updates["email"] = strings.ToLower(data.Email)
+		var count int64
+		if err := database.DB.
+			Model(&models.User{}).
+			Where("email = ?", data.Email).
+			Where("id <> ?", userID).
+			Count(&count).Error; err != nil {
+			sendResponse(c, http.StatusInternalServerError, nil, "Failed to check email uniqueness")
+			return
+		}
+		if count > 0 {
+			sendResponse(c, http.StatusBadRequest, nil, "Email sudah terdaftar")
+			return
+		}
+
+		updates["email"] = data.Email
+
 	}
 
 	if data.Password != "" {
