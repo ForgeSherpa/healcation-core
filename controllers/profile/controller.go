@@ -99,7 +99,7 @@ func UpdateProfile(c *gin.Context) {
 			return
 		}
 		if count > 0 {
-			sendResponse(c, http.StatusBadRequest, nil, "Email sudah terdaftar")
+			sendResponse(c, http.StatusConflict, nil, "Email sudah terdaftar")
 			return
 		}
 
