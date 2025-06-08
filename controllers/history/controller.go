@@ -72,6 +72,8 @@ func GetHistories(c *gin.Context) {
 	if search != "" {
 		dataQ = dataQ.Where("LOWER(town) LIKE ?", pattern)
 	}
+
+	// Urutan berdasarkan id terbaru
 	dataQ = dataQ.Order("id DESC")
 	if err := dataQ.
 		Limit(limit).
@@ -94,17 +96,23 @@ func GetHistories(c *gin.Context) {
 		return
 	}
 
+	// responseHistories := make([]HistoryResponse, 0)
 	responseHistories := make([]HistoryResponse, 0, len(histories))
 	for _, h := range histories {
 		start := h.StartDate.Format("2006-01-02")
 		end := h.EndDate.Format("2006-01-02")
 		responseHistories = append(responseHistories, HistoryResponse{
-			ID:        h.ID,
-			Country:   h.Country,
-			Town:      fmt.Sprintf("%s - %s", h.Town, start),
+			ID:      h.ID,
+			Country: h.Country,
+			// Format the town with the start date
+			Town:      fmt.Sprintf("%s %s", h.Town, start),
 			StartDate: start,
 			EndDate:   end,
-			Image:     h.Image,
+
+			//format lama incase error di apps
+			// StartDate: 	h.StartDate.Format("2006-01-02"),
+			// EndDate:  h.EndDate.Format("2006-01-02"),
+			Image: h.Image,
 		})
 	}
 
