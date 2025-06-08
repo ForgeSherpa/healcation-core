@@ -72,6 +72,7 @@ func GetHistories(c *gin.Context) {
 	if search != "" {
 		dataQ = dataQ.Where("LOWER(town) LIKE ?", pattern)
 	}
+	dataQ = dataQ.Order("id DESC")
 	if err := dataQ.
 		Limit(limit).
 		Offset(offset).
