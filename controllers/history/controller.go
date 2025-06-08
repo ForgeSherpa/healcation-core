@@ -2,6 +2,7 @@ package history
 
 import (
 	"encoding/json"
+	"fmt"
 	"healcationBackend/database"
 	"healcationBackend/models"
 	"math"
@@ -92,14 +93,16 @@ func GetHistories(c *gin.Context) {
 		return
 	}
 
-	responseHistories := make([]HistoryResponse, 0)
+	responseHistories := make([]HistoryResponse, 0, len(histories))
 	for _, h := range histories {
+		start := h.StartDate.Format("2006-01-02")
+		end := h.EndDate.Format("2006-01-02")
 		responseHistories = append(responseHistories, HistoryResponse{
 			ID:        h.ID,
 			Country:   h.Country,
-			Town:      h.Town,
-			StartDate: h.StartDate.Format("2006-01-02"),
-			EndDate:   h.EndDate.Format("2006-01-02"),
+			Town:      fmt.Sprintf("%s - %s", h.Town, start),
+			StartDate: start,
+			EndDate:   end,
 			Image:     h.Image,
 		})
 	}
